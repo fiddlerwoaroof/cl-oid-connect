@@ -12,6 +12,7 @@
                :anaphora
                :alexandria
                :lack-middleware-session
+               :sheeple
                :cl-who)
   :serial t
   :components ((:file "package")
