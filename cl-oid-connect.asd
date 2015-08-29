@@ -1,11 +1,20 @@
 ;;;; cl-oid-connect.asd
 
 (asdf:defsystem :cl-oid-connect
-  :description "Describe cl-oid-connect here"
-  :author "Your Name <your.name@example.com>"
-  :license "Specify license here"
-  :depends-on (#:drakma)
+  :description "A Common Lisp Implementation of Various OAuth2 Authentication Protocols"
+  :author "Ed L <(format nil \"~a@~a\" \"el-projects\" \"howit.is\")>"
+  :license "2=Clause BSD"
+  :depends-on (:drakma
+               :ningle
+               :clack
+               :cljwt
+               :cl-json
+               :anaphora
+               :alexandria
+               :lack-middleware-session
+               :cl-who)
   :serial t
   :components ((:file "package")
                (:file "cl-oid-connect")))
+
 

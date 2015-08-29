@@ -7,7 +7,9 @@
 (ql:quickload :anaphora)
 (ql:quickload :alexandria)
 (ql:quickload :lack-middleware-session)
+(ql:quickload :cl-who)
+(ql:quickload :sheeple)
 
 (defpackage :cl-oid-connect
-  (:use #:cl #:drakma #:ningle #:clack #:cljwt #:anaphora #:alexandria))
+  (:use #:cl #:drakma #:ningle #:clack #:cljwt #:anaphora #:alexandria #:sheeple))
 
