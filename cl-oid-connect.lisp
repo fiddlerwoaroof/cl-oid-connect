@@ -38,14 +38,15 @@
 (defparameter *oid* (make-instance 'ningle:<app>))
 (setf drakma:*text-content-types* (cons '("application" . "json") drakma:*text-content-types*))
 
-(sheeple:defproto =service-info= ()
-                  ((client-id nil :accessor t)
-                   (secret nil :accessor t)))
+(setf =service-info= (object :parents '()
+                             :properties '((client-id nil :accessor client-id)
+                                           (secret nil :accessor secret))))
 
-(sheeple:defproto =endpoint-schema= ()
-                  ((auth-endpoint nil :accessor t)
-                   (token-endpoint nil :accessor t)
-                   (redirect-uri nil :accessor t)))
+(setf =endpoint-schema= (object :parents '()
+                                :properties '((auth-endpoint nil :accessor auth-endpoint)
+                                              (token-endpoint nil :accessor token-endpoint)
+                                              (userinfo-endpoint nil :accessor t)
+                                              (redirect-uri nil :accessor t))))
 (sheeple:defmessage get-user-info (a b))
 (sheeple:defmessage get-access-token (a b))
 
@@ -62,7 +63,7 @@
 (defproto *fbook-endpoint-schema* (=endpoint-schema= *fbook-info*)
           ((auth-endpoint "https://www.facebook.com/dialog/oauth")
            (token-endpoint "https://graph.facebook.com/v2.3/oauth/access_token")
-           (userinfo-endpoint "https://graph.facebook.com/v2.3/me" :accessor t)
+           (userinfo-endpoint "https://graph.facebook.com/v2.3/me")
            (redirect-uri  "http://srv2.elangley.org:9090/oidc_callback/facebook")))
 
 (sheeple:defreply get-access-token ((endpoint-schema *fbook-endpoint-schema*) (code sheeple:=string=))
@@ -144,12 +145,15 @@
          (progn
            ,@body)
          (progn
-           (setf (gethash :next-page session) (lack.request:request-path-info *request*))
+           (setf (gethash :next-page ,session) (lack.request:request-path-info *request*))
            '(302 (:location "/login")))))))
 
 (defmacro with-session ((var) &body body)
-  `(let ((,var (context :session)))
-     ,@body))
+  `(progn
+     (format t "The session var is: ~a it contains: ~a~%"  ,(symbol-name var) ,var)
+     (let ((,var (context :session)))
+       (format t "The session var is: ~a it now contains: ~a~%"  ,(symbol-name var) ,var)
+       ,@body)))
 
 (defun load-facebook-info (loadfrom)
   (with-open-file (fbook-info (truename loadfrom))
@@ -187,12 +191,13 @@
 
 (defun oauth2-login-middleware (&key google-info facebook-info)
   (lambda (app)
+    (in-package :cl-oid-connect)
     (load-facebook-info facebook-info)
     (load-goog-endpoint-schema)
     (load-google-info google-info)
 
     (def-route ("/login/google" (params) :app app)
-      (with-session (session)
+      (with-session (cl-oid-connect:session)
         (let ((state (gen-state 36)))
           (setf (gethash :state session) state)
           (with-endpoints *goog-endpoint-schema*
@@ -204,7 +209,7 @@
 
 
     (def-route ("/login/facebook" (params) :app app)
-      (with-session (session)
+      (let ((session (ningle:context :session)))
         (let ((state (gen-state 36)))
           (setf (gethash :state session) state)
           (with-endpoints *fbook-endpoint-schema*
@@ -219,7 +224,7 @@
       (let ((received-state (cdr (string-assoc "state" params)))
             (code (cdr (string-assoc "code" params))))
         (check-state received-state
-                     (with-session (session)
+                     (with-session (cl-oid-connect:session)
                        (with-endpoints *goog-endpoint-schema*
                          (let* ((a-t (get-access-token *goog-endpoint-schema* code))
                                 (id-token (assoc-cdr :id--token a-t))
@@ -270,12 +275,10 @@
 (export '(oauth2-login-middleware with-session))
 
 (in-package :cl-user)
-(import '(cl-oid-connect:redirect-if-necessary cl-oid-connect:def-route cl-oid-connect:require-login))
-(import '(cl-oid-connect:oauth2-login-middleware cl-oid-connect:with-session))
 
 (defparameter *app* (make-instance 'ningle:<app>))
 
-(def-route ("/login" (params) :app *app*)
+(cl-oid-connect:def-route ("/login" (params) :app *app*)
   (cl-who:with-html-output-to-string (s)
     (:html
       (:head
@@ -284,23 +287,27 @@
         (:div (:a :href "/login/facebook" "Facebook"))
         (:div (:a :href "/login/google" "Google")))))) 
 
-(def-route ("/" (params) :app *app*)
-  (with-session (session)
-    (redirect-if-necessary session
-      (require-login 
-        (anaphora:sunless (gethash :counter session) (setf anaphora:it 0))
-        (incf (gethash :counter session))
+(defvar *smession* nil)
+
+(cl-oid-connect:def-route ("/" (params) :app *app*)
+  (cl-oid-connect:with-session (*smession*)
+    (cl-oid-connect:redirect-if-necessary *smession*
+      (cl-oid-connect:require-login 
+        (anaphora:sunless (gethash :counter *smession*) (setf anaphora:it 0))
+        (incf (gethash :counter *smession*))
         (format nil "~Ath visit<br/>~a<br/><br/>~S<br/>"
-                (gethash :counter session)
-                (alexandria:hash-table-alist session)
+                (gethash :counter *smession*)
+                (alexandria:hash-table-alist *smession*)
                 (alexandria:hash-table-alist (ningle:context :session)))))))
 
 (setf *handler* (clack:clackup (lack.builder:builder
                                  :backtrace
                                  :session
                                  (funcall
-                                   (oauth2-login-middleware
-                                     :facebook-info (truename "facebook-secrets.json") 
-                                     :google-info (truename "google-secrets.json"))
+                                   (cl-oid-connect:oauth2-login-middleware
+                                     :facebook-info
+                                      (truename "/home/edwlan/github_repos/cl-oid-connect/facebook-secrets.json") 
+                                     :google-info
+                                     (truename "/home/edwlan/github_repos/cl-oid-connect/google-secrets.json"))
                                    *app*)) :port 9090))
 
