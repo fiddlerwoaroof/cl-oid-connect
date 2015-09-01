@@ -1,0 +1,106 @@
+(:import "url(https://fonts.googleapis.com/css?family=Lato:400,100,300,400italic,300italic,700,700italic,900&subset=latin,latin-ext)")
+(:import "url(https://fonts.googleapis.com/css?family=Caudex)")
+
+(*
+  :box-sizing "border-box"
+  :margin "0px"
+  :padding "0px"
+  :font-family "Lato")
+
+((:or ul ol)
+ :list-style "none")
+
+((:or h1 h2)
+ :font-size "153.9%")
+(:h3
+  :font-size "146.5%")
+((:or h4 h5 h6)
+ :font-size "138.5%")
+
+(((:or ul) + (:or h1 h2 h3 h4 h5 h6))
+ :width "initial")
+
+(header
+  :color "white"
+  (h1
+    :font-family "Caudex"
+    :font-size inherit
+    :margin-top "0em"
+    :padding-left "1em"
+    :font-weight 200))
+
+(section#sidebar
+  :width "20vw"
+  :height "90vh"
+  :position "fixed"
+  :overflow "auto"
+  (ul.menu
+    :text-align right
+    :font-variant small-cap
+    (li
+      (a
+        :width "100%"
+        :display block
+        :padding "1em"
+        :color inherit
+        :text-decoration none
+        :font-weight 700
+        :font-size "125%"
+        ))))
+
+(main
+  :padding-right "20vw"
+  :width "80vw"
+  :height "90vh"
+  :float "right"
+  :clear "right"
+  :overflow "auto")
+
+(.feed-header
+  :padding "1em"
+  :padding-bottom "0em")
+
+((:and .link :before)
+ :content "-")
+
+((:and .link.closed :before)
+ :content "+")
+
+((.link.closed .link-content) 
+  :max-height "0px"
+  :padding "0em")  
+
+(.link
+  :text-decoration none
+  :display block
+  :padding "1em"
+  :padding-bottom "0em"
+  :overflow hidden
+  :font-size "0.8em"
+  (.link-header
+    :cursor pointer
+    (h4
+      :margin-bottom "0.5em"
+      :display "inline-block")) 
+  (.link-info
+    :margin-left "-1em"
+    :margin-right "-1em"
+    :padding-left "1em"
+    :padding-right "1em"
+    (.link-url 
+      :float "left"
+      )
+    (.link-date
+      :float "right"
+      :display block))
+  ((:and .link-info :after)
+   :content "\" \""
+   :display block
+   :clear both)
+  (.link-content
+    :transition "max-height 0.2s ease"))
+
+(.feed
+  :overflow "hidden"
+  )
+

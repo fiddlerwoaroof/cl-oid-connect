@@ -1,0 +1,17 @@
+(chain ($ document)
+       (ready
+         (lambda ()
+           (chain ($ ".link-header")
+                  (click
+                    (lambda ()
+                      (chain ($ this)
+                             (siblings ".link-content")
+                             (each (lambda ()
+                                     (if (= (chain ($ this) (css "max-height")) "0px")
+                                       (chain ($ this)
+                                              (css "max-height" (@ this scroll-height)))
+                                       (chain ($ this)
+                                              (css "max-height" "0px"))))))
+                      (chain ($ this)
+                             (parent)
+                             (toggle-class "closed"))))))))

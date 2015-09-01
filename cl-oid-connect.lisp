@@ -33,7 +33,6 @@
 |#
 
 (in-package :cl-oid-connect)
-(declaim (optimize (debug 2)))
 ; Should this be here?
 (defparameter *oid* (make-instance 'ningle:<app>))
 (setf drakma:*text-content-types* (cons '("application" . "json") drakma:*text-content-types*))
@@ -58,6 +57,10 @@
 (defparameter *endpoint-schema* nil)
 ; goog is well behaved
 (defparameter *goog-endpoint-schema* (defobject (=endpoint-schema= *goog-info*)))
+
+(defun get-base-url (request) (format nil "~a//~a/oidc_callback"
+                                      (lack.request:request-query-parameters)
+                                      ))
 
 ; fbook needs personal attention
 (defproto *fbook-endpoint-schema* (=endpoint-schema= *fbook-info*)
@@ -190,14 +193,15 @@
 
 
 (defun oauth2-login-middleware (&key google-info facebook-info)
-  (lambda (app)
-    (in-package :cl-oid-connect)
-    (load-facebook-info facebook-info)
-    (load-goog-endpoint-schema)
-    (load-google-info google-info)
+  (let ((clack-env nil))
+    (lambda (app)
+      (in-package :cl-oid-connect)
+      (load-facebook-info facebook-info)
+      (load-goog-endpoint-schema)
+      (load-google-info google-info)
 
     (def-route ("/login/google" (params) :app app)
-      (with-session (cl-oid-connect:session)
+      (with-context-variables (session)
         (let ((state (gen-state 36)))
           (setf (gethash :state session) state)
           (with-endpoints *goog-endpoint-schema*
@@ -224,7 +228,7 @@
       (let ((received-state (cdr (string-assoc "state" params)))
             (code (cdr (string-assoc "code" params))))
         (check-state received-state
-                     (with-session (cl-oid-connect:session)
+                     (with-context-variables (session)
                        (with-endpoints *goog-endpoint-schema*
                          (let* ((a-t (get-access-token *goog-endpoint-schema* code))
                                 (id-token (assoc-cdr :id--token a-t))
@@ -239,7 +243,7 @@
             (code (cdr (string-assoc "code" params))))
         (with-endpoints *fbook-endpoint-schema*
           (check-state received-state
-                       (with-session (session)
+                       (with-context-variables (session)
                          (let* ((a-t (get-access-token *fbook-endpoint-schema* code))
                                 (id-token (assoc-cdr :access--token a-t)))
                            (setf (gethash :userinfo session) (get-user-info *fbook-endpoint-schema* id-token))
@@ -247,17 +251,17 @@
                        '(403 '() "Out, vile imposter!")))))
 
     (def-route ("/userinfo.json" (params) :app app)
-      (with-session (session)
+      (with-context-variables (session)
         (require-login 
           (with-endpoints  (gethash :endpoint-schema session)
             (cl-json:encode-json-to-string (gethash :userinfo session))))))
 
     (def-route ("/logout" (params) :app app)
-      (with-session (session)
+      (with-context-variables (session)
         (setf (gethash :userinfo session) nil)
         '(302 (:location "/"))))
 
-    app))
+    app)))
 
 
 (defmacro redirect-if-necessary (sessionvar &body body)
@@ -273,41 +277,3 @@
 
 (export '(redirect-if-necessary def-route require-login))
 (export '(oauth2-login-middleware with-session))
-
-(in-package :cl-user)
-
-(defparameter *app* (make-instance 'ningle:<app>))
-
-(cl-oid-connect:def-route ("/login" (params) :app *app*)
-  (cl-who:with-html-output-to-string (s)
-    (:html
-      (:head
-        (:title "Login"))
-      (:body
-        (:div (:a :href "/login/facebook" "Facebook"))
-        (:div (:a :href "/login/google" "Google")))))) 
-
-(defvar *smession* nil)
-
-(cl-oid-connect:def-route ("/" (params) :app *app*)
-  (cl-oid-connect:with-session (*smession*)
-    (cl-oid-connect:redirect-if-necessary *smession*
-      (cl-oid-connect:require-login 
-        (anaphora:sunless (gethash :counter *smession*) (setf anaphora:it 0))
-        (incf (gethash :counter *smession*))
-        (format nil "~Ath visit<br/>~a<br/><br/>~S<br/>"
-                (gethash :counter *smession*)
-                (alexandria:hash-table-alist *smession*)
-                (alexandria:hash-table-alist (ningle:context :session)))))))
-
-(setf *handler* (clack:clackup (lack.builder:builder
-                                 :backtrace
-                                 :session
-                                 (funcall
-                                   (cl-oid-connect:oauth2-login-middleware
-                                     :facebook-info
-                                      (truename "/home/edwlan/github_repos/cl-oid-connect/facebook-secrets.json") 
-                                     :google-info
-                                     (truename "/home/edwlan/github_repos/cl-oid-connect/google-secrets.json"))
-                                   *app*)) :port 9090))
-

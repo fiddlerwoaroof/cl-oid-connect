@@ -12,6 +12,9 @@
     #:drakma
     ;#:lack-middleware-session
     #:ningle
+    #:lass
+    #:lquery
+    #:plump
     #:sheeple)
   (:export
     #:redirect-if-necessary
