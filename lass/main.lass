@@ -1,7 +1,7 @@
 (:import "url(https://fonts.googleapis.com/css?family=Lato:400,100,300,400italic,300italic,700,700italic,900&subset=latin,latin-ext)")
 (:import "url(https://fonts.googleapis.com/css?family=Caudex)")
 
-(.feed
+((:or .feed main)
   :-webkit-backface-visibility hidden;
   :-webkit-transform "translateZ(0)")
 
@@ -37,7 +37,7 @@
     :font-family "Caudex"
     :font-size inherit
     :margin-top "0em"
-    :padding-left "1em"
+    :padding-left "10vw"
     :font-weight 200))
 
 ((:or "#sidebar" main)

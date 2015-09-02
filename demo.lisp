@@ -230,9 +230,18 @@
 ;rebase $base03,$base02,$base01,$base00 ,$base0 ,$base1 ,$base2 ,$base3
 
 
-(cl-oid-connect:def-route ("/theme.css" (params) :app *app*)
+
+(cl-oid-connect:def-route ("/theme/dark.css" (params) :app *app*)
+  (let ((*palette* (make-instance 'palette)))
+    (eval '(get-theme-css))))
+
+(cl-oid-connect:def-route ("/theme/light.css" (params) :app *app*)
+  (let ((*palette* (invert-palette (make-instance 'palette))))
+    (eval '(get-theme-css))))
+
+(defun get-theme-css ()
   (flet ((combine-unit-q (quant unit) (format nil "~d~a" quant unit)))
-    (let* ((header-height 13)
+    (let* ((header-height 19)
            (height-units "vh")
            (ss (lass:compile-and-write
                  `(* :color ,(colorscheme-fg *colorscheme*))
@@ -250,9 +259,12 @@
                     :border-bottom "thin" "solid" ,(colorscheme-accent *colorscheme*)
                     :height ,(combine-unit-q header-height height-units)
                     :font-size ,(combine-unit-q (* 0.75 header-height) height-units)
-                    :line-height ,(combine-unit-q header-height height-units))
+                    :line-height ,(combine-unit-q header-height height-units)
+                    (.flip-button
+                      :float right))
 
                  `(main
+                    :border-left thin solid ,(colorscheme-accent *colorscheme*)
                     :height ,(combine-unit-q (- 100 header-height) height-units))
 
                  `((:or a (:and a :visited) (:and a :active) code.url)
@@ -266,7 +278,9 @@
                        :background-color ,(colorscheme-bg-highlight *colorscheme*)
                        :color ,(colorscheme-fg-highlight *colorscheme*))))
 
-                 `(.feed :border thin solid ,(colorscheme-fg *colorscheme*))
+                 `(.feed
+                    :border-bottom thin solid ,(colorscheme-fg *colorscheme*)
+                    :border-left none)
 
                  `(.link
                     :border-top thin solid ,(colorscheme-fg *colorscheme*)
@@ -342,10 +356,12 @@
        (:script :src "/static/js/fold.js" :type "text/javascript" "")
        (:link :rel "stylesheet" :href "/static/css/main.css")
        (:link :rel "stylesheet" :href "/static/css/content.css")
-       (:link :rel "stylesheet" :href "/theme.css"))
+       (:link :rel "stylesheet" :href "/theme/light.css"))
      (:body
        (:header
-         (:h1 "Worricow"))
+         (:button :class "flip-button" "c") 
+         (:h1 "Feeds")
+         )
        (:section :id "content"
         (:section :id "sidebar"
          (cl-markup:raw (feedlist-markup *feeds*)))

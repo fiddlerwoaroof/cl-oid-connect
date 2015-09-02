@@ -28,4 +28,15 @@
                                        (chain ($ this) (css "max-height" (@ this scroll-height)))
                                        (chain ($ this) (css "max-height" "0px"))))))
                       (chain ($ this) (parent) (toggle-class "closed")))))
+           (setf invert-palette
+                 (lambda ()
+                   (let* ((style-sheet (chain ($ "link[href^=\"/theme\"]")))
+                         (style-sheet-name (chain style-sheet (attr "href"))))
+                     (chain style-sheet (attr "href"
+                                              (if (chain style-sheet-name (match (regex |dark|)))
+                                                     (chain style-sheet-name
+                                                            (replace (regex |dark|) "light"))
+                                                     (chain style-sheet-name
+                                                            (replace (regex |light|) "dark"))))))))
+           (chain ($ ".flip-button") (click invert-palette))
            null)))

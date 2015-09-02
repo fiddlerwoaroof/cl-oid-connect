@@ -18,6 +18,12 @@ $(document).ready(function () {
         });
         return $(this).parent().toggleClass('closed');
     });
+    invertPalette = function () {
+        var styleSheet = $('link[href^="/theme"]');
+        var styleSheetName = styleSheet.attr('href');
+        return styleSheet.attr('href', styleSheetName.match(/dark/) ? styleSheetName.replace(/dark/, 'light') : styleSheetName.replace(/light/, 'dark'));
+    };
+    $('.flip-button').click(invertPalette);
     return null;
 });
 
