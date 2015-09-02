@@ -127,8 +127,8 @@
             do (princ (random 36) stream)))))
 
 
-(defmacro def-route ((url args &key (app *oid*)) &body body)
-  `(setf (ningle:route ,app ,url)
+(defmacro def-route ((url args &key (app *oid*) (method :GET)) &body body)
+  `(setf (ningle:route ,app ,url :method ,method)
          #'(lambda ,args
              (declare (ignorable ,@args))
              ,@body)))
