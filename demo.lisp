@@ -4,6 +4,7 @@
 (ql:quickload :cl-markup)
 
 (push (cons "application" "rdf+xml") drakma:*text-content-types*)
+(push (cons "text" "rss+xml") drakma:*text-content-types*)
 
 (defparameter *app* (make-instance 'ningle:<app>))
 
@@ -60,7 +61,7 @@
            (link (extract-text "link"))
            (description-raw (let ((plump:*html-tags*)
                                   (ss (make-string-output-stream)))
-                              (plump:serialize 
+                              (plump:serialize
                                 (plump:parse (extract-text "description"))
                                 ss)
                               (get-output-stream-string ss)))
@@ -111,7 +112,7 @@
           (:a :href "/login/facebook" "Facebook"))
         (:div
           :class "login-button google"
-          (:a :href "/login/google" "Google")))))) 
+          (:a :href "/login/google" "Google"))))))
 
 (defparameter *feed-urls*
   #(
@@ -122,12 +123,13 @@
     "http://www.reddit.com/r/roguelikedev.rss"
     "http://www.reddit.com/r/roguelikes.rss"
     "http://www.reddit.com/r/talesfromtechsupport.rss"
+    "https://thomism.wordpress.com/feed/rss"
     ))
 
 (let
   ((plump-parser:*tag-dispatchers* plump-parser:*xml-tags*))
   (defparameter *docs* (map 'vector
-                            (lambda (x) 
+                            (lambda (x)
                               (format t "~a~%" x)
                               (unwind-protect (plump-parser:parse
                                                 (drakma:http-request x))))
@@ -135,30 +137,72 @@
 
 (defparameter *feeds* (map 'vector (lambda (x) (unwind-protect (make-rss-feed x))) *docs*))
 
-(defclass colorscheme ()
-  ((background :accessor colorscheme-background :initform "#002b36")
-   (foreground :accessor colorscheme-foreground :initform "#839496")
-   (accent     :accessor colorscheme-accent     :initform "#586e75" )
-   (base03     :accessor colorscheme-base03      :initform "#002b36")
-   (base02     :accessor colorscheme-base02      :initform "#073642")
-   (base01     :accessor colorscheme-base01      :initform "#586e75")
-   (base00     :accessor colorscheme-base00      :initform "#657b83")
-   (base0      :accessor colorscheme-base0       :initform "#839496")
-   (base1      :accessor colorscheme-base1       :initform "#93a1a1")
-   (base2      :accessor colorscheme-base2       :initform "#eee8d5")
-   (base3      :accessor colorscheme-base3       :initform "#fdf6e3")
-   (yellow     :accessor colorscheme-yellow      :initform "#b58900")
-   (orange     :accessor colorscheme-orange      :initform "#cb4b16")
-   (red        :accessor colorscheme-red         :initform "#dc322f")
-   (magenta    :accessor colorscheme-magenta     :initform "#d33682")
-   (violet     :accessor colorscheme-violet      :initform "#6c71c4")
-   (blue       :accessor colorscheme-blue        :initform "#268bd2")
-   (cyan       :accessor colorscheme-cyan        :initform "#2aa198")
-   (green      :accessor colorscheme-green       :initform "#859900")))
+(defclass palette () ; soloarized http://ethanschoonover.com/solarized
+  ((base03     :accessor palette-base03      :initform "#002b36")
+   (base02     :accessor palette-base02      :initform "#073642")
+   (base01     :accessor palette-base01      :initform "#586e75")
+   (base00     :accessor palette-base00      :initform "#657b83")
+   (base0      :accessor palette-base0       :initform "#839496")
+   (base1      :accessor palette-base1       :initform "#93a1a1")
+   (base2      :accessor palette-base2       :initform "#eee8d5")
+   (base3      :accessor palette-base3       :initform "#fdf6e3")
+   (yellow     :accessor palette-yellow      :initform "#b58900")
+   (orange     :accessor palette-orange      :initform "#cb4b16")
+   (red        :accessor palette-red         :initform "#dc322f")
+   (magenta    :accessor palette-magenta     :initform "#d33682")
+   (violet     :accessor palette-violet      :initform "#6c71c4")
+   (blue       :accessor palette-blue        :initform "#268bd2")
+   (cyan       :accessor palette-cyan        :initform "#2aa198")
+   (green      :accessor palette-green       :initform "#859900")))
 
-(defgeneric accentize (colorscheme accent)) 
+(defparameter *palette* (make-instance 'palette))
+(defgeneric invert-palette (palette))
+
+(defmacro initialize-to (obj1-v obj2-v &body slot-swaps)
+  (alexandria:with-gensyms (obj1 obj2)
+    `(let* ((,obj1 ,obj1-v)
+            (,obj2 ,obj2-v))
+       ,@(loop for (to from) in slot-swaps
+               collect `(setf (,to ,obj1) (,from ,obj2))))))
+
+(defmethod invert-palette ((palette palette))
+  (let ((result (make-instance 'palette)))
+    (initialize-to result palette
+      (palette-base03 palette-base3)
+      (palette-base02 palette-base2)
+      (palette-base01 palette-base1)
+      (palette-base00 palette-base0)
+      (palette-base0  palette-base00)
+      (palette-base1  palette-base01)
+      (palette-base2  palette-base02)
+      (palette-base3  palette-base03))
+    result))
+(setf *palette* (invert-palette *palette*))
+
+(defclass colorscheme ()
+  ((bg           :accessor -colorscheme-bg           :initform 'base03)
+   (bg-highlight :accessor -colorscheme-bg-highlight :initform 'base02)
+   (fg-deemph    :accessor -colorscheme-fg-deemph    :initform 'base01)
+   (fg           :accessor -colorscheme-fg           :initform 'base0 )
+   (fg-highlight :accessor -colorscheme-fg-highlight :initform 'base1 )
+   (accent       :accessor -colorscheme-accent       :initform 'violet)))
+
+(defgeneric accentize (colorscheme accent))
 (defmethod accentize ((colorscheme colorscheme) accent)
   (setf (colorscheme-accent colorscheme) (funcall accent colorscheme)))
+
+(defmacro def-palette-accessor (scheme-slot scheme palette )
+  `(progn
+     (defgeneric ,scheme-slot (,scheme))
+     (defmethod ,scheme-slot ((,scheme colorscheme))
+       (slot-value ,palette (,(intern (concatenate 'string "-" (symbol-name scheme-slot))) ,scheme)))))
+
+(def-palette-accessor colorscheme-bg scheme *palette*)
+(def-palette-accessor colorscheme-bg-highlight scheme *palette*)
+(def-palette-accessor colorscheme-fg-deemph scheme *palette*)
+(def-palette-accessor colorscheme-fg scheme *palette*)
+(def-palette-accessor colorscheme-fg-highlight scheme *palette*)
+(def-palette-accessor colorscheme-accent scheme *palette*)
 
 (defgeneric rebase (colorscheme))
 (defmethod rebase ((colorscheme colorscheme))
@@ -169,9 +213,12 @@
                (,color2 ,obj)
                (,color1 ,obj)))))
     ; Note that swap-color doesn't use gensyms: so don't run functions in invocation
-    (swap-color colorscheme colorscheme-foreground colorscheme-base0 colorscheme-base0)
     (swap-color colorscheme colorscheme-accent colorscheme-base1 colorscheme-base01)
-    (swap-color colorscheme colorscheme-background colorscheme-base3 colorscheme-base03)
+    (swap-color colorscheme colorscheme-bg colorscheme-base3 colorscheme-base03)
+    (swap-color colorscheme colorscheme-bg-highlight colorscheme-base3 colorscheme-base03)
+    (swap-color colorscheme colorscheme-deemph colorscheme-base0 colorscheme-base0)
+    (swap-color colorscheme colorscheme-fg colorscheme-base0 colorscheme-base0)
+    (swap-color colorscheme colorscheme-fg-highlight colorscheme-base0 colorscheme-base0)
     colorscheme))
 
 
@@ -183,50 +230,67 @@
 ;rebase $base03,$base02,$base01,$base00 ,$base0 ,$base1 ,$base2 ,$base3
 
 
-(cl-oid-connect:def-route ("/" (params) :app *app*)
+(cl-oid-connect:def-route ("/theme.css" (params) :app *app*)
   (flet ((combine-unit-q (quant unit) (format nil "~d~a" quant unit)))
-    (let* ((header-height 10)
+    (let* ((header-height 13)
            (height-units "vh")
            (ss (lass:compile-and-write
-                 `(* :color ,(colorscheme-foreground *colorscheme*))
+                 `(* :color ,(colorscheme-fg *colorscheme*))
 
-                 `(body :background-color ,(colorscheme-background *colorscheme*))
+                 `(body :background-color ,(colorscheme-bg *colorscheme*))
 
-                 `((:or h1 h2 h3 h4 h5 h6) :color ,(colorscheme-accent *colorscheme*))
+                 `((:or h1 h2 h3)
+                   :color ,(colorscheme-fg-highlight *colorscheme*))
+                 `(.feed-header
+                    :background-color ,(colorscheme-bg-highlight *colorscheme*))
+
+                 `((:or h4 h5 h6) :color ,(colorscheme-fg-highlight *colorscheme*))
 
                  `(header
-                    :border-bottom "thin" "solid" ,(colorscheme-foreground *colorscheme*)
+                    :border-bottom "thin" "solid" ,(colorscheme-accent *colorscheme*)
                     :height ,(combine-unit-q header-height height-units)
                     :font-size ,(combine-unit-q (* 0.75 header-height) height-units)
                     :line-height ,(combine-unit-q header-height height-units))
 
+                 `(main
+                    :height ,(combine-unit-q (- 100 header-height) height-units))
+
                  `((:or a (:and a :visited) (:and a :active) code.url)
-                   :color ,(colorscheme-accent *colorscheme*))
+                   :color ,(colorscheme-fg-highlight *colorscheme*))
 
                  `(section#sidebar
-                    ((ul.menu li a)
-                     ((+ a)
-                      :border-top "thin" "solid" ,(colorscheme-accent *colorscheme*))
-                     ((:and li :hover)
-                      :background-color ,(colorscheme-foreground *colorscheme*)
-                      :color ,(colorscheme-background *colorscheme*))))
+                    (ul.menu
+                      ((li + li)
+                       :border-top "thin" "solid" ,(colorscheme-fg-highlight *colorscheme*))
+                      ((:and li :hover)
+                       :background-color ,(colorscheme-bg-highlight *colorscheme*)
+                       :color ,(colorscheme-fg-highlight *colorscheme*))))
 
-                 `(.feed :border thin solid ,(colorscheme-foreground *colorscheme*))
+                 `(.feed :border thin solid ,(colorscheme-fg *colorscheme*))
+
                  `(.link
-                    :border-top thin solid ,(colorscheme-foreground *colorscheme*)
-                    :border-bottom thin solid ,(colorscheme-foreground *colorscheme*)
+                    :border-top thin solid ,(colorscheme-fg *colorscheme*)
+                    :border-bottom none
+
+                    (.link-header :background-color ,(colorscheme-bg-highlight *colorscheme*))
 
                     (.link-info
-                      :background ,(colorscheme-foreground *colorscheme*)
-                      :color ,(colorscheme-background *colorscheme*)
-                      :border "thin" "solid" ,(colorscheme-foreground *colorscheme*)
+                      :color ,(colorscheme-fg-deemph *colorscheme*)
+                      :border-bottom "thin" "solid" ,(colorscheme-fg *colorscheme*)
+                      ((:or a span)
+                       :color inherit)
+                      ((:and a :hover)
+                       :color ,(colorscheme-fg *colorscheme*))
+                      ))
+                 `((:and .feed-header :hover)
+                   :background-color ,(colorscheme-bg *colorscheme*))
+                 `(.link.closed
+                    (.link-header
+                      :background-color ,(colorscheme-bg *colorscheme*))
+                    ((:and .link-header :hover)
+                     :background-color ,(colorscheme-bg-highlight *colorscheme*)))
 
-                      (.link-url 
-                        ;:color ,(colorscheme-cyan *colorscheme*)
-                        :color ,(colorscheme-background *colorscheme*))
-                      (.link-date
-                        :color ,(colorscheme-background *colorscheme*)))))))
-
+                 )))
       `(200 (:content-type "text/css") ,ss))))
 
 (defmacro item-markup (item)
@@ -241,17 +305,18 @@
              (:span :class "link-url" (rss-item-link ,item-s)))
             (:span :class "link-date") (rss-item-pub-date ,item-s)))
           (:section :class "link-content"
-           (cl-markup:raw (rss-item-description-raw ,item-s))))))))
+           (:div
+             (cl-markup:raw (rss-item-description-raw ,item-s)))))))))
 
 (defmacro feed-markup (feed-v fc-v)
   (alexandria:with-gensyms (feed fc)
     `(let ((,feed ,feed-v)
            (,fc ,fc-v))
        (cl-markup:markup
-         (:section :class "feed" :id (format nil "feed-~a" ,fc)
+         (:section :class "feed closed" :id (format nil "feed-~a" ,fc)
           (:section :class "feed-header"
            (:h2 (rss-feed-title ,feed))
-           (:h3 (rss-feed-description ,feed))) 
+           (:h3 (rss-feed-description ,feed)))
           (:ul :class "post-list"
            (loop for item in (rss-feed-items ,feed)
                  collect (item-markup item))))))))
@@ -276,6 +341,7 @@
        (:script :src "https://code.jquery.com/jquery-2.1.4.min.js" :type "text/javascript" "")
        (:script :src "/static/js/fold.js" :type "text/javascript" "")
        (:link :rel "stylesheet" :href "/static/css/main.css")
+       (:link :rel "stylesheet" :href "/static/css/content.css")
        (:link :rel "stylesheet" :href "/theme.css"))
      (:body
        (:header
@@ -295,12 +361,14 @@
 ;(cl-oid-connect:def-route ("/" (params) :app *app*)
 ;  (ningle:with-context-variables (session)
 ;    (cl-oid-connect:redirect-if-necessary session
-;      (cl-oid-connect:require-login 
+;      (cl-oid-connect:require-login
 ;        (anaphora:sunless (gethash :counter session) (setf anaphora:it 0))
 ;        (incf (gethash :counter session))
 ;        (format nil "~Ath visit<br/>~a<br/><br/>"
 ;                (gethash :counter session))))))
 
+(cl-oid-connect:def-route ("/reflect" (params) :app *app* :method :post)
+  (format nil "~s<hr/>" (jonathan.encode:to-json (jonathan:parse (car (elt params 0))))))
 
 (cl-oid-connect:def-route ("/feeds/:feeds/html" (params) :app *app*)
   (ningle.context:with-context-variables (session)
@@ -316,14 +384,16 @@
 (cl-oid-connect:def-route ("/" (params) :app *app*)
   (ningle.context:with-context-variables (session)
     (cl-oid-connect:require-login
-      (cl-oid-connect:require-login 
+      (cl-oid-connect:require-login
         (let ((*feeds* (gethash :feeds session *feeds*)))
           (base-template-f))))))
 
 (defvar *handler* nil)
 
+(defun stop ()
+  (clack:stop (pop *handler*)))
 
-(defun start (tmp)
+(defun start (&optional tmp)
   (let ((server (if (> (length tmp) 1)
                   (intern (string-upcase (elt tmp 1)) 'keyword)
                   :hunchentoot)))
@@ -331,16 +401,14 @@
           (lack.builder:builder
             :backtrace
             :session
-            :csrf
+            ;:csrf
             (:static :path "/static/" :root #p"./static/")
             (funcall
               (cl-oid-connect:oauth2-login-middleware
-                :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json") 
+                :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
                 :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json"))
               *app*)) :port 9090 :server server)
-        *handler*))
-  (loop (mp:process-wait))
-  )
+        *handler*)))
 
 
 
