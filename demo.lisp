@@ -1,24 +1,38 @@
 (in-package :cl-user)
-(ql:quickload :plump)
-(ql:quickload :lquery)
 (ql:quickload :cl-markup)
 (ql:quickload :cl-oid-connect)
 (ql:quickload :colors)
+(ql:quickload :lquery)
+(ql:quickload :plump)
+(ql:quickload :postmodern)
 
 (push (cons "application" "rdf+xml") drakma:*text-content-types*)
 (push (cons "application" "rss+xml") drakma:*text-content-types*)
 (push (cons "text" "rss+xml") drakma:*text-content-types*)
 
+(lquery:define-lquery-list-function tag-name (nodes &rest tags)
+  "Manipulate elements on the basis of there tag-name.
+   With no arguments, return their names else return
+   the corresponding tags."
+  (if (null tags)
+    (map 'vector #'plump:tag-name nodes)
+    (apply #'vector
+           (loop for node across nodes
+                 if (find (plump:tag-name node) tags :test #'string=)
+                 collect node))))
+
 (defparameter *app* (make-instance 'ningle:<app>))
 
 (defclass rss-feed ()
-  ((feed :accessor rss-feed-feed
-         :initarg :feed)
+  ((feed :accessor rss-feed-feed :initarg :feed)
    (channel :accessor rss-feed-channel)
    (title :accessor rss-feed-title)
    (link :accessor rss-feed-link)
    (description :accessor rss-feed-description)
    (items :accessor rss-feed-items)))
+
+(defgeneric serialize (cls))
+
 
 (defclass rss-item ()
   ((item :accessor rss-item-item  :initarg :item)
@@ -33,6 +47,10 @@
    (pub-date :accessor rss-item-pub-date)
    (source :accessor rss-item-source)))
 
+(defmethod serialize ((obj rss-feed))
+  (postmodern:make-dao 'rss)
+  )
+
 (defmacro get-elements (feed &optional (filter nil))
   (let ((feed-sym (gensym))
         (filter-lis `(lambda (x) (and (plump-dom:element-p x) ,@(loop for x in filter
@@ -44,11 +62,7 @@
   `(get-elements ,feed ((lambda (x) (string= ,tagname (plump:tag-name x))))))
 
 (defmacro extract-text (selector &optional (default ""))
-  (alexandria:with-gensyms (selector-s)
-    `(let ((,selector-s ,selector))
-       (if (not (equalp #() (lquery:$ ,selector-s)))
-         (lquery:$ ,selector-s (text) (node))
-         ,default))))
+  `(or (lquery:$ ,selector (text) (node)) ,default))
 
 (defun make-rss-item (item)
   (lquery:initialize item)
@@ -98,7 +112,7 @@
 (defun make-rss-feed (feed)
   (lquery:initialize feed)
   (let* ((result (make-instance 'rss-feed :feed feed))
-         (channel (lquery:$ "channel" (text) (node)))
+         (channel (lquery:$ "channel" (node)))
          (title (lquery:$  "title" (text) (node)))
          (link (lquery:$ "link" (text) (node)))
          (description (lquery:$ "description" (text) (node)))
@@ -125,17 +139,6 @@
           :class "login-button google"
           (:a :href "/login/google" "Google"))))))
 
-(lquery:define-lquery-list-function tag-name (nodes &rest tags)
-  "Manipulate elements on the basis of there tag-name.
-   With no arguments, return their names else return
-   the corresponding tags."
-  (if (null tags)
-    (map 'vector #'plump:tag-name nodes)
-    (apply #'vector
-           (loop for node across nodes
-                 if (find (plump:tag-name node) tags :test #'string=) 
-                 collect node))))
-
 (defparameter *feed-urls*
   #(
     "http://www.reddit.com/r/lisp.rss"
@@ -157,109 +160,6 @@
 
 (defparameter *feeds* (map 'vector (lambda (x) (unwind-protect (make-rss-feed x))) *docs*))
 
-;;; this will be bound by calls to with-palette
-;;; probably should be refactored out
-(defparameter *palette* nil)
-
-(defparameter *colorscheme* (make-instance 'colors:colorscheme))
-
-(cl-oid-connect:def-route ("/theme/dark.css" (params) :app *app*)
-  (colors:let-palette (make-instance 'colors:palette)
-    (eval '(get-theme-css))))
-
-(cl-oid-connect:def-route ("/theme/light.css" (params) :app *app*)
-  (colors:let-palette (colors:invert-palette (make-instance 'colors:palette))
-    (eval '(get-theme-css))))
-
-(defun get-theme-css ()
-  (colors:with-palette (*palette*)
-    (flet ((combine-unit-q (quant unit) (format nil "~d~a" quant unit)))
-      (let* ((header-height 9)
-             (height-units "vh")
-             (ss (lass:compile-and-write
-                   `(* :color ,(colors:colorscheme-fg *colorscheme*))
-
-                 `(body :background-color ,(colors:colorscheme-bg *colorscheme*))
-
-                 `((:or h1 h2 h3)
-                   :color ,(colors:colorscheme-fg-highlight *colorscheme*))
-                 `(.feed-header
-                    :background-color ,(colors:colorscheme-bg-highlight *colorscheme*))
-
-                 `((:or h4 h5 h6) :color ,(colors:colorscheme-fg-highlight *colorscheme*))
-
-                 `(header
-                    :border-bottom "thin" "solid" ,(colors:colorscheme-accent *colorscheme*)
-                    :height ,(combine-unit-q header-height height-units)
-                    :font-size ,(combine-unit-q (* 0.75 header-height) height-units)
-                    :line-height ,(combine-unit-q header-height height-units)
-                    (.flip-button
-                      :float right
-                      :width "3em"
-                      :height "3em"
-                      :padding-left "1em"
-                      :padding-bottom "1em"
-                      :border-bottom-left-radius "100%"
-                      :border none
-                      :transition "all 0.5s ease"
-                      :background-color ,(colors:colorscheme-fg *colorscheme*)
-                      :color ,(colors:colorscheme-bg *colorscheme*))
-                    ((:and .flip-button :focus)
-                     :outline none)
-                    ((:and .flip-button :hover)
-                     :width "4em"
-                     :height "4em"
-                     :padding-left "2em"
-                     :padding-bottom "2em")
-                    )
-
-                 `(main
-                    :border-left thin solid ,(colors:colorscheme-accent *colorscheme*)
-                    :height ,(combine-unit-q (- 100 header-height) height-units))
-
-                 `((:or a (:and a :visited) (:and a :active) code.url)
-                   :color ,(colors:colorscheme-fg-highlight *colorscheme*))
-
-                 `(section#sidebar
-                    (ul.menu
-                      ((li + li)
-                       :border-top "thin" "solid" ,(colors:colorscheme-fg-highlight *colorscheme*))
-                      ((:and li :hover)
-                       :background-color ,(colors:colorscheme-hover-highlight *colorscheme*)
-                       :color ,(colors:colorscheme-fg-highlight *colorscheme*))))
-
-                 `(.feed
-                    :border-bottom thin solid ,(colors:colorscheme-fg *colorscheme*)
-                    :border-left none)
-
-                 `(.link-header :background-color ,(colors:colorscheme-bg-highlight *colorscheme*))
-                 `(.link
-                    :border-top thin solid ,(colors:colorscheme-fg *colorscheme*)
-                    :border-bottom none
-
-
-                    (.link-info
-                      :color ,(colors:colorscheme-fg-deemph *colorscheme*)
-                      :border-bottom "thin" "solid" ,(colors:colorscheme-fg *colorscheme*)
-                      ((:or a span)
-                       :color inherit)
-                      ((:and a :hover)
-                       :color ,(colors:colorscheme-fg *colorscheme*))
-                      ))
-                 `((:and .feed-header :hover)
-                   :background-color ,(colors:colorscheme-hover-highlight *colorscheme*))
-                 `((.link.closed .link-header)
-                   :background-color ,(colors:colorscheme-bg *colorscheme*))
-
-                 `((:or (:and .link-header :hover) (.link.closed (:and .link-header)))
-                  :background-color ,(colors:colorscheme-hover-highlight *colorscheme*))
-                 `(blah
-                    :a ,(colors:colorscheme-fg-highlight *colorscheme*)
-                    :a ,(colors:colorscheme-hover-highlight *colorscheme*)
-                    :a ,(colors:colorscheme-bg-highlight *colorscheme*)
-                    )
-                 )))
-      `(200 (:content-type "text/css") ,ss)))))
 
 (defmacro item-markup (item)
   (alexandria:with-gensyms (item-s)
@@ -313,7 +213,7 @@
        (:link :rel "stylesheet" :href "/theme/light.css"))
      (:body
        (:header
-         (:button :class "flip-button" ">") 
+         (:button :class "flip-button" ">")
          (:h1 "What?")
          )
        (:section :id "content"
@@ -354,9 +254,112 @@
 (cl-oid-connect:def-route ("/" (params) :app *app*)
   (ningle.context:with-context-variables (session)
       ;(cl-oid-connect:require-login
-        (let ((*feeds* (gethash :feeds session *feeds*)))
-          (base-template-f));)
+        (cl-oid-connect:redirect-if-necessary session
+          (let ((*feeds* (gethash :feeds session *feeds*)))
+          (base-template-f)));)
   ))
+
+;;; this will be bound by calls to with-palette
+;;; probably should be refactored out
+(defparameter *palette* nil)
+
+(defparameter *colorscheme* (make-instance 'colors:colorscheme))
+
+(cl-oid-connect:def-route ("/theme/dark.css" (params) :app *app*)
+  (colors:let-palette (make-instance 'colors:palette)
+    (eval '(get-theme-css))))
+
+(cl-oid-connect:def-route ("/theme/light.css" (params) :app *app*)
+  (colors:let-palette (colors:invert-palette (make-instance 'colors:palette))
+    (eval '(get-theme-css))))
+
+
+
+(defun get-theme-css ()
+  (colors:with-palette (*palette*)
+    (flet ((combine-unit-q (quant unit) (format nil "~d~a" quant unit)))
+      (let* ((header-height 9)
+             (height-units "vh")
+             (ss (lass:compile-and-write
+                   `(* :color ,(colors:colorscheme-fg *colorscheme*))
+
+                   `(body :background-color ,(colors:colorscheme-bg *colorscheme*))
+
+                   `((:or h1 h2 h3)
+                     :color ,(colors:colorscheme-fg-highlight *colorscheme*))
+                   `(.feed-header
+                      :background-color ,(colors:colorscheme-bg-highlight *colorscheme*))
+
+                   `((:or h4 h5 h6) :color ,(colors:colorscheme-fg-highlight *colorscheme*))
+
+                   `(header
+                      :border-bottom "thin" "solid" ,(colors:colorscheme-accent *colorscheme*)
+                      :height ,(combine-unit-q header-height height-units)
+                      :font-size ,(combine-unit-q (* 0.75 header-height) height-units)
+                      :line-height ,(combine-unit-q header-height height-units)
+                      (.flip-button
+                        :float right
+                        :width "3em"
+                        :height "3em"
+                        :padding-left "1em"
+                        :padding-bottom "1em"
+                        :border-bottom-left-radius "100%"
+                        :border none
+                        :transition "all 2s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                        :background-color ,(colors:colorscheme-fg *colorscheme*)
+                        :color ,(colors:colorscheme-bg *colorscheme*))
+                      ((:and .flip-button :focus)
+                       :outline none)
+                      ((:and .flip-button :hover)
+                       :width "6em"
+                       :height "6em"
+                       :padding-left "4em"
+                       :padding-bottom "3em")
+                      )
+
+                   `(main
+                      :border-left thin solid ,(colors:colorscheme-accent *colorscheme*)
+                      :height ,(combine-unit-q (- 100 header-height) height-units))
+
+                   `((:or a (:and a :visited) (:and a :active) code.url)
+                     :color ,(colors:colorscheme-fg-highlight *colorscheme*))
+
+                   `(section#sidebar
+                      (ul.menu
+                        ((li + li)
+                         :border-top "thin" "solid" ,(colors:colorscheme-fg-highlight *colorscheme*))
+                        ((:and li :hover)
+                         :background-color ,(colors:colorscheme-hover-highlight *colorscheme*)
+                         :color ,(colors:colorscheme-fg-highlight *colorscheme*))))
+
+                   `(.feed
+                      :border-bottom thick solid ,(colors:colorscheme-accent *colorscheme*)
+                      :border-left none)
+
+                   `(.link-header :background-color ,(colors:colorscheme-bg-highlight *colorscheme*))
+                   `(.link
+                      :border-top thin solid ,(colors:colorscheme-fg *colorscheme*)
+                      :border-bottom none
+
+
+                      (.link-info
+                        :color ,(colors:colorscheme-fg-deemph *colorscheme*)
+                        :border-bottom "thin" "solid" ,(colors:colorscheme-fg *colorscheme*)
+                        ((:or a span)
+                         :color inherit)
+                        ((:and a :hover)
+                         :color ,(colors:colorscheme-fg *colorscheme*))
+                        ))
+                   
+                   `((:and .feed-header :hover)
+                     :background-color ,(colors:colorscheme-hover-highlight *colorscheme*))
+
+                   `((.link.closed .link-header)
+                     :background-color ,(colors:colorscheme-bg *colorscheme*))
+
+                   `((:or (:and .link-header :hover) (.link.closed (:and .link-header :hover)))
+                     :background-color ,(colors:colorscheme-hover-highlight *colorscheme*)))))
+        `(200 (:content-type "text/css") ,ss)))))
 
 (defvar *handler* nil)
 

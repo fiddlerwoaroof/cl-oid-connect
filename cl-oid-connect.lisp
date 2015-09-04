@@ -1,4 +1,5 @@
 ;;;; cl-oid-connect.lisp
+;;;; TODO: Need to refactor out server names!!!
 #|
 |Copyright (c) 2015 Edward Langley
 |All rights reserved.
@@ -45,6 +46,7 @@
                                 :properties '((auth-endpoint nil :accessor auth-endpoint)
                                               (token-endpoint nil :accessor token-endpoint)
                                               (userinfo-endpoint nil :accessor t)
+                                              (auth-scope "openid profile email" :accessor t)
                                               (redirect-uri nil :accessor t))))
 (sheeple:defmessage get-user-info (a b))
 (sheeple:defmessage get-access-token (a b))
@@ -67,6 +69,7 @@
           ((auth-endpoint "https://www.facebook.com/dialog/oauth")
            (token-endpoint "https://graph.facebook.com/v2.3/oauth/access_token")
            (userinfo-endpoint "https://graph.facebook.com/v2.3/me")
+           (auth-scope "email")
            (redirect-uri  "http://srv2.elangley.org:9090/oidc_callback/facebook")))
 
 (sheeple:defreply get-access-token ((endpoint-schema *fbook-endpoint-schema*) (code sheeple:=string=))
@@ -97,6 +100,7 @@
 
     (setf (auth-endpoint schema) (assoc-cdr :authorization--endpoint discovery-document))
     (setf (token-endpoint schema) (assoc-cdr :token--endpoint discovery-document))
+    (setf (userinfo-endpoint schema) (assoc-cdr :userinfo--endpoint discovery-document))
 
     (if gui-p (sheeple:defreply get-user-info ((a schema)) (funcall gui a)))
     (if gat-p (sheeple:defreply get-access-token ((a schema) (b sheeple:=string=))
@@ -116,7 +120,7 @@
                        :parameters `(("client_id" . ,(client-id endpoint-schema))
                                      ("app_id" . ,(client-id endpoint-schema))
                                      ("response_type" . "code")
-                                     ("scope" . "email")
+                                     ("scope" . ,(auth-scope endpoint-schema))
                                      ("redirect_uri" . ,(redirect-uri endpoint-schema))
                                      ("state" . ,state))))
 
@@ -163,7 +167,7 @@
     (let* ((data (yason:parse fbook-info))
            (client-id (gethash "client-id" data))
            (secret (gethash "secret" data)))
-      (setf (client-id *FBOOK-INFO*) client-id) 
+      (setf (client-id *FBOOK-INFO*) client-id)
       (setf (secret *FBOOK-INFO*) secret))))
 
 (defun load-google-info (loadfrom)
@@ -191,6 +195,15 @@
                       :gat #'goog-get-access-token)
   (setf (redirect-uri *goog-endpoint-schema*)   "http://srv2.elangley.org:9090/oidc_callback/google"))
 
+(sheeple:defreply get-user-info ((endpoint-schema *goog-endpoint-schema*) (access-token sheeple:=string=))
+  (format t "getting user data: ~a~%" "blarg")
+  (let ((endpoint (userinfo-endpoint endpoint-schema)))
+    (cl-json:decode-json-from-string
+      (drakma:http-request endpoint
+                           :parameters `(("alt" . "json")
+                                         ("access_token" . ,access-token))
+                           ))))
+
 
 (defun oauth2-login-middleware (&key google-info facebook-info)
   (let ((clack-env nil))
@@ -200,16 +213,16 @@
       (load-goog-endpoint-schema)
       (load-google-info google-info)
 
-    (def-route ("/login/google" (params) :app app)
-      (with-context-variables (session)
-        (let ((state (gen-state 36)))
-          (setf (gethash :state session) state)
-          (with-endpoints *goog-endpoint-schema*
-            (setf (gethash :endpoint-schema session) *goog-endpoint-schema*)
-            (multiple-value-bind (content rcode headers) (do-auth-request *goog-endpoint-schema* state)
-              (if (< rcode 400)
-                `(302 (:location ,(cdr (assoc :location headers))))
-                content))))))
+      (def-route ("/login/google" (params) :app app)
+        (with-context-variables (session)
+          (let ((state (gen-state 36)))
+            (setf (gethash :state session) state)
+            (with-endpoints *goog-endpoint-schema*
+              (setf (gethash :endpoint-schema session) *goog-endpoint-schema*)
+              (multiple-value-bind (content rcode headers) (do-auth-request *goog-endpoint-schema* state)
+                (if (< rcode 400)
+                  `(302 (:location ,(cdr (assoc :location headers))))
+                  content))))))
 
 
     (def-route ("/login/facebook" (params) :app app)
@@ -231,10 +244,14 @@
                      (with-context-variables (session)
                        (with-endpoints *goog-endpoint-schema*
                          (let* ((a-t (get-access-token *goog-endpoint-schema* code))
+                                (access-token (assoc-cdr :access--token a-t)) ;; Argh
                                 (id-token (assoc-cdr :id--token a-t))
                                 (decoded (cljwt:decode id-token :fail-if-unsupported nil)))
-                           (setf (gethash :userinfo session) decoded)
-                           '(302 (:location "/")))))
+                           (setf (gethash :idtoken session) (get-user-info *goog-endpoint-schema* id-token))
+                           (setf (gethash :accesstoken session) (get-user-info *goog-endpoint-schema* access-token))
+                           (setf (gethash :userinfo session) (get-user-info *goog-endpoint-schema* access-token))
+                           '(302 (:location "/"))
+                           )))
                      '(403 '() "Out, vile imposter!"))))
 
 
@@ -252,7 +269,7 @@
 
     (def-route ("/userinfo.json" (params) :app app)
       (with-context-variables (session)
-        (require-login 
+        (require-login
           (with-endpoints  (gethash :endpoint-schema session)
             (cl-json:encode-json-to-string (gethash :userinfo session))))))
 
