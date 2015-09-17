@@ -1,0 +1,165 @@
+/*
+Baseline - a designer framework
+Copyright (C) 2009 Stephane Curzi, ProjetUrbain.com
+Creative Commons Attribution-Share Alike 3.0 License
+version 0.5.2
+*/
+li.link > section.link-content > div {
+  /******************** Base ********************/
+  /* html 5 */
+  /* Debug */
+                 								                                                  /*
+Baseline - a designer framework
+Copyright (C) 2009 Stephane Curzi, ProjetUrbain.com
+Creative Commons Attribution-Share Alike 3.0 License
+version 0.5
+                                                                                           */
+  /******************** Baseline grid: 13/18px ********************/ }
+  li.link > section.link-content > div h1, li.link > section.link-content > div h2, li.link > section.link-content > div h3, li.link > section.link-content > div h4, li.link > section.link-content > div h5, li.link > section.link-content > div h6 {
+    line-height: 1.2; }
+  li.link > section.link-content > div h4, li.link > section.link-content > div h5, li.link > section.link-content > div h6 {
+    font-weight: bold; }
+  li.link > section.link-content > div b, li.link > section.link-content > div strong, li.link > section.link-content > div caption, li.link > section.link-content > div th, li.link > section.link-content > div thead, li.link > section.link-content > div dt, li.link > section.link-content > div legend {
+    font-weight: bold; }
+  li.link > section.link-content > div cite, li.link > section.link-content > div dfn, li.link > section.link-content > div em, li.link > section.link-content > div i {
+    font-style: italic; }
+  li.link > section.link-content > div code, li.link > section.link-content > div kbd, li.link > section.link-content > div samp, li.link > section.link-content > div pre, li.link > section.link-content > div tt, li.link > section.link-content > div var {
+    font-family: mono-space, monospace; }
+  li.link > section.link-content > div h1, li.link > section.link-content > div h2, li.link > section.link-content > div h3, li.link > section.link-content > div h4, li.link > section.link-content > div h5, li.link > section.link-content > div h6 {
+    word-spacing: -0.125em; }
+  li.link > section.link-content > div p {
+    word-spacing: 0.125em;
+    hyphenate: auto;
+    hyphenate-lines: 3; }
+  li.link > section.link-content > div p + p {
+    text-indent: 1.5em; }
+  li.link > section.link-content > div p + p.no-indent {
+    text-indent: 0; }
+  li.link > section.link-content > div pre {
+    white-space: pre; }
+  li.link > section.link-content > div del {
+    text-decoration: line-through; }
+  li.link > section.link-content > div mark {
+    background: rgba(255, 255, 0, 0.4);
+    padding: 0 .25em; }
+  li.link > section.link-content > div ins {
+    color: #f00; }
+  li.link > section.link-content > div small, li.link > section.link-content > div sup, li.link > section.link-content > div sub {
+    font-size: 80%; }
+  li.link > section.link-content > div big {
+    font-size: 125%;
+    line-height: 80%; }
+  li.link > section.link-content > div abbr, li.link > section.link-content > div acronym {
+    font-size: 85%;
+    text-transform: uppercase;
+    letter-spacing: .1em; }
+  li.link > section.link-content > div abbr[title], li.link > section.link-content > div acronym[title], li.link > section.link-content > div dfn[title] {
+    border-bottom: 1px dotted black;
+    cursor: help; }
+  li.link > section.link-content > div sup, li.link > section.link-content > div sub {
+    line-height: 0; }
+  li.link > section.link-content > div sup {
+    vertical-align: super; }
+  li.link > section.link-content > div sub {
+    vertical-align: sub; }
+  li.link > section.link-content > div blockquote {
+    padding: 1.5em; }
+  li.link > section.link-content > div hr {
+    border: none;
+    background: #ddd;
+    width: 100%; }
+  li.link > section.link-content > div ul, li.link > section.link-content > div ol {
+    margin-left: 1.5em; }
+  li.link > section.link-content > div ul {
+    list-style: disc outside; }
+  li.link > section.link-content > div ol {
+    list-style: decimal outside; }
+  li.link > section.link-content > div input, li.link > section.link-content > div select, li.link > section.link-content > div button {
+    cursor: pointer; }
+  li.link > section.link-content > div table {
+    font: inherit;
+    width: 100%; }
+  li.link > section.link-content > div article, li.link > section.link-content > div aside, li.link > section.link-content > div header, li.link > section.link-content > div hgroup,
+  li.link > section.link-content > div nav, li.link > section.link-content > div figure, li.link > section.link-content > div section, li.link > section.link-content > div footer {
+    display: block; }
+  li.link > section.link-content > div .debug {
+    outline: solid gold 1px; }
+  li.link > section.link-content > div .debug-background {
+    background: rgba(255, 215, 0, 0.2) !important; }
+  li.link > section.link-content > div body {
+    font-size: 75%;
+    line-height: 1.5;
+    /*12/18*/ }
+  li.link > section.link-content > div h1, li.link > section.link-content > div h2, li.link > section.link-content > div h3, li.link > section.link-content > div h4, li.link > section.link-content > div h5, li.link > section.link-content > div h6 {
+    position: relative; }
+  li.link > section.link-content > div h1, li.link > section.link-content > div h2 {
+    line-height: 36px;
+    margin-bottom: 18px; }
+  li.link > section.link-content > div h1, li.link > section.link-content > div h2, li.link > section.link-content > div h3, li.link > section.link-content > div h4 {
+    margin-top: 18px; }
+  li.link > section.link-content > div h3, li.link > section.link-content > div h4, li.link > section.link-content > div h5, li.link > section.link-content > div h6 {
+    line-height: 18px; }
+  li.link > section.link-content > div h1 {
+    font-size: 36px;
+    top: 5px; }
+  li.link > section.link-content > div h2 {
+    font-size: 28px;
+    top: 8px; }
+  li.link > section.link-content > div h3 {
+    font-size: 22px;
+    top: 1px; }
+  li.link > section.link-content > div h4 {
+    font-size: 18px;
+    top: 2px; }
+  li.link > section.link-content > div h5 {
+    font-size: 15px;
+    top: 4px; }
+  li.link > section.link-content > div h6 {
+    font-size: 13px;
+    top: 5px; }
+  li.link > section.link-content > div h1:first-child,
+  li.link > section.link-content > div h2:first-child,
+  li.link > section.link-content > div h3:first-child,
+  li.link > section.link-content > div h4:first-child {
+    margin-top: 0; }
+  li.link > section.link-content > div p, li.link > section.link-content > div pre, li.link > section.link-content > div address {
+    font-size: 13px;
+    line-height: 18px;
+    position: relative;
+    top: 5px; }
+  li.link > section.link-content > div small {
+    font-size: 11px; }
+  li.link > section.link-content > div abbr, li.link > section.link-content > div code, li.link > section.link-content > div kbd,
+  li.link > section.link-content > div samp, li.link > section.link-content > div small, li.link > section.link-content > div var {
+    line-height: 15px; }
+  li.link > section.link-content > div ul, li.link > section.link-content > div ol, li.link > section.link-content > div dl, li.link > section.link-content > div dialog {
+    font-size: 13px;
+    line-height: 18px;
+    position: relative;
+    top: 5px;
+    margin-top: 18px;
+    margin-bottom: 18px; }
+  li.link > section.link-content > div li ul, li.link > section.link-content > div li ol, li.link > section.link-content > div ul ul, li.link > section.link-content > div ol ol {
+    top: 0;
+    margin-top: 0;
+    margin-bottom: 0; }
+  li.link > section.link-content > div li h1, li.link > section.link-content > div li h2, li.link > section.link-content > div li h3,
+  li.link > section.link-content > div li h4, li.link > section.link-content > div li h5, li.link > section.link-content > div li h6,
+  li.link > section.link-content > div li p {
+    top: 0; }
+  li.link > section.link-content > div form, li.link > section.link-content > div legend, li.link > section.link-content > div label {
+    font-size: 13px;
+    line-height: 18px; }
+  li.link > section.link-content > div legend {
+    position: relative;
+    top: 5px; }
+  li.link > section.link-content > div table {
+    font-size: 13px; }
+  li.link > section.link-content > div caption {
+    font-size: 13px;
+    line-height: 18px;
+    position: relative; }
+  li.link > section.link-content > div hr {
+    position: relative;
+    height: 4px;
+    margin: 18px 0 14px 0; }

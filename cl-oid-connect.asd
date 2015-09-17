@@ -16,7 +16,8 @@
                 :lass
                 :lquery
                 :plump
-                :cl-who)
+                :cl-who
+                :postmodern)
   :serial t
   :components ((:file "package")
                (:file "cl-oid-connect")))

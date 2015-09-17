@@ -22,5 +22,7 @@
     #:require-login
     #:oauth2-login-middleware
     #:with-session
+    #:assoc-cdr
     #:session ; private!!
     ))
+

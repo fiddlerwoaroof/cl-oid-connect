@@ -1,0 +1,15 @@
+(in-package :angular)
+
+
+(def-module whitespace '(ng-resource ng-sanitize)
+  (defcontroller -Main-Ctrl ($http $resource $sce)
+    (resource feeds "feeds/json" nil)
+    (scope-var feeds (chain feeds (get)))
+    (scope-var data "hello world!")
+    (scope-function render-html (html-code)
+      (chain $sce (trust-as-html html-code)))
+    (scope-function toggle-closed (ent)
+      (setf (@ ent closed) (not (@ ent closed))))
+    ))
+
+; vim: ft=lisp

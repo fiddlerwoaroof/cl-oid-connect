@@ -1,42 +1,42 @@
-(chain ($ document)
-       (ready
-         (lambda ()
-           (chain ($ ".link-header")
-                  (click
-                    (lambda ()
-                      (chain ($ this)
-                             (siblings ".link-content")
-                             (each (lambda ()
-                                     (if (= (chain ($ this) (css "max-height")) "0px")
-                                       (let ((added-height (chain ($ this) (children) (outer-height)))
-                                             (parent-height (chain ($ this)
-                                                                   (parents ".post-list")
-                                                                   (css "max-height"))))
-                                         (chain ($ this) (css "max-height" added-height))
-                                         (chain ($ this)
-                                                (parents ".post-list")
-                                                (css "max-height" (+ added-height parent-height))))
-                                       (chain ($ this) (css "max-height" "0px"))))))
-                      (chain ($ this) (parent) (toggle-class "closed")))))
-           (chain ($ ".feed-header")
-                  (click
-                    (lambda ()
-                      (chain ($ this)
-                             (siblings ".post-list")
-                             (each (lambda ()
-                                     (if (= (chain ($ this) (css "max-height")) "0px")
-                                       (chain ($ this) (css "max-height" (@ this scroll-height)))
-                                       (chain ($ this) (css "max-height" "0px"))))))
-                      (chain ($ this) (parent) (toggle-class "closed")))))
-           (setf invert-palette
-                 (lambda ()
-                   (let* ((style-sheet (chain ($ "link[href^=\"/theme\"]")))
-                         (style-sheet-name (chain style-sheet (attr "href"))))
-                     (chain style-sheet (attr "href"
-                                              (if (chain style-sheet-name (match (regex |dark|)))
-                                                     (chain style-sheet-name
-                                                            (replace (regex |dark|) "light"))
-                                                     (chain style-sheet-name
-                                                            (replace (regex |light|) "dark"))))))))
-           (chain ($ ".flip-button") (click invert-palette))
-           null)))
+(in-package :ps_translator)
+
+(macros 
+  (getOffset (el) `($ (,el) (offset) top)))
+
+(def-event document ready ()
+  (def-event ".link-header, .feed-header" click ()
+    ($ (".menu") (add-class "open")) t)
+
+  (def-event ".link-header" click ()
+
+    ($each (this (siblings ".link-content"))
+      (if (= ($this (css "max-height")) "0px")
+
+        (let ((added-height ($this (children) (outer-height)))
+              (parent-height ($this (parents ".post-list") (css "max-height"))))
+          ($this (css "max-height" added-height))
+
+          ($this (parents ".post-list")
+                 (css "max-height" (+ added-height parent-height))))
+
+        ($this (css "max-height" "0px"))))
+    ($this (parent) (toggle-class "closed")))
+
+  (def-event ".feed-header" click ()
+    ($each (this (siblings ".post-list"))
+      (if (= ($this (css "max-height")) "0px")
+        ($this (css "max-height" (@ this scroll-height)))
+        ($this (css "max-height" "0px"))))
+    ($this (parent) (toggle-class "closed")))
+
+  (def-event ".flip-button" click ()
+    (let* ((style-sheet ($ ("link[href^=\"/theme\"]")))
+           (style-sheet-name (chain style-sheet (attr "href"))))
+      (chain style-sheet
+             (attr "href"
+                   (if (chain style-sheet-name (match (regex |dark|)))
+                     (chain style-sheet-name (replace (regex |dark|) "light"))
+                     (chain style-sheet-name (replace (regex |light|) "dark")))))))
+  nil)
+
+; vim: set ft=lisp :

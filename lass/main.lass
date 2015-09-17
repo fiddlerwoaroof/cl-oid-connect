@@ -11,7 +11,6 @@
   :padding "0px")
 
 (body
-  :transition "background-color 0.25s ease"
   :font-family "Lato")
 
 (((:or main "#sidebar" .feed) > (:or ul ol))
@@ -52,7 +51,9 @@
   (ul.menu
     :text-align right
     :font-variant small-caps
+    :opacity 0
     (li
+      :transition "all 0.25s ease"
       (a
         :color inherit
         :display block
@@ -60,16 +61,29 @@
         :font-weight 700
         :padding "0.5em"
         :text-decoration none
-        :transition "background-color 0.25s ease"
         :width "100%"
-        ))))
+        )))
+  (ul.menu.open
+    :opacity 1))
 
 (main
   :width "62vw"
   :float "right"
   :clear "right"
   :overflow-x "hidden"
-  :overflow-y "scroll")
+  :overflow-y "scroll"
+  :position "relative")
+
+(img.spinner
+  :position "absolute"
+  :top "50%"
+  :left "50%"
+  :transform "translate(-50%,-50%)"
+  )
+
+(.hide
+  :display none
+  )
 
 (.feed-header
   ((:or h2 h3) :padding "0.62em")
@@ -114,14 +128,25 @@
    :display block
    :clear both)
   (.link-content
+    :overflow hidden
+    
+    (img
+      :margin "1em" "0%" "1em" "10%"
+      :max-width "80%"
+      :max-height "70vh"
+      )
     ((> div)
-     :padding "1em")
+     :padding "1em"
+     :font-size "12pt")
     :transition "max-height 0.5s ease"))
 
 (.feed.closed
+  :border-bottom-width thin
   (.post-list 
     :max-height "0px"
-    :padding "0em"))
+    :padding "0em")
+  (h3
+    :display none))
 
 ((:and .feed :first-child)
  :border-top none)
@@ -131,3 +156,41 @@
   (.post-list
     :transition "max-height 0.5s ease"))
 
+("#add-form"
+  :font-size "1em"
+  :height "1.8em"
+  :display block
+  :overflow hidden
+  :width "100%"
+
+  (input
+    :border "none"
+    :width "95%"
+    :height "100%"
+    :font-size "0.8em"
+    :line-height "1.8em"
+    :padding "1em" "0.5em"
+    )
+  (button
+    :border none
+    :border-radius 0px
+    :font-size inherit
+    :width "5%" 
+    :height "100%"
+    ))
+
+
+(.flip-button
+  :position absolute
+  :right "0em"
+  :top "0em"
+  :z-index 1000
+  :width "3em"
+  :height "3em"
+  :padding-left "1em"
+  :padding-bottom "1em"
+  :border-bottom-left-radius "100%"
+  :border none
+  :transition "all 2s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+  :background-image none
+  )
