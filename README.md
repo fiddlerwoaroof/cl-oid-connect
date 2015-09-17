@@ -1,3 +1,5 @@
+**This is still a mess, because I haven't split off the OpenID Connect stuff from another project yet**
+
 This project implements the OpenId Connect API. In its current state, it can
 authenticate a user against Google and display the informaiton Google sends
 back. The only tricky requirement it has is cljwt, a library for parsing JSON
