@@ -1,3 +1,9 @@
+;(in-package :cl-user)
+;(defpackage :whitespace.rss
+;  (:shadow "to-json")
+;  (:use #:cl #:alexandria #:postmodern #:lquery #:cl-syntax #:cl-annot.syntax #:cl-annot.class
+;        #:whitespace.tables #:iterate))
+
 (in-package :whitespace.rss)
 (cl-annot.syntax:enable-annot-syntax)
 
