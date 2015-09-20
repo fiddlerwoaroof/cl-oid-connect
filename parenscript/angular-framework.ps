@@ -1,15 +1,29 @@
 (in-package :angular)
 
-
+;:action "/feeds/add?api=yes" :name "add-form" :id "add-form" :method "post" 
 (def-module whitespace '(ng-resource ng-sanitize)
   (defcontroller -Main-Ctrl ($http $resource $sce)
-    (resource feeds "feeds/json" nil)
-    (scope-var feeds (chain feeds (get)))
+    (resource feeds "/feeds" nil
+              (json (method "GET" url "/feeds/json"))
+              (add  (method "POST" url "/feeds/add")))
+
+    (scope-var feeds (chain feeds (json)))
     (scope-var data "hello world!")
+    (scope-var add-form (create url ""))
+
     (scope-function render-html (html-code)
       (chain $sce (trust-as-html html-code)))
+
     (scope-function toggle-closed (ent)
       (setf (@ ent closed) (not (@ ent closed))))
+
+    (scope-function add-feed ()
+      (chain feeds (add (create "url" ($s add-form url)
+                                "api" "yes"))
+             $promise
+             (then
+               (lambda (feed)
+                 ($s feeds result (unshift (@ feed result)))))))
     ))
 
 ; vim: ft=lisp

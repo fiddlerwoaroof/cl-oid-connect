@@ -23,8 +23,8 @@
 (defmacro+ps resource (name url params &body body)
   `(var ,name
         ($resource ,url ,(cons 'create params)
-                   ,@(loop for (name form) in body
-                           collect (list 'create name (cons 'create form))))))
+                   ,(cons 'create (loop for (name form) in body
+                                         append (list name (cons 'create form)))))))
 
 (defmacro+ps scope-function (name arguments &body body)
   `(scope-var ,name (lambda ,arguments
