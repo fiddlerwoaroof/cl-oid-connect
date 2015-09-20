@@ -28,7 +28,6 @@
 (load "tables.lisp")
 
 (defpackage :whitespace.rss
-  (:shadow "to-json")
   (:use #:cl #:alexandria #:postmodern #:lquery #:cl-syntax #:cl-annot.syntax #:cl-annot.class
         #:whitespace.tables #:iterate))
 (load "rss.lisp")
@@ -156,9 +155,9 @@
         (cl-markup:raw
           (unless demo
             (cl-markup:markup
-              (:form :action "/feeds/add" :name "add-form" :id "add-form" :method "post"
-               (:input :type "text" :name "url" :class "urltext" "")
-               (:input :type "hidden" :name "api" :value "no" "")
+              (:form :name "add-form" :id "add-form" :ng-submit "addFeed()"
+               (:input :type "text" :name "url" :class "urltext" :ng-model "addForm.url" :placeholder "http://example.com/feed.rss . . ." "")
+               (:input :type "hidden" :name "api" :value "yes" "")
                (:button :type "submit" :class "fsub" "+")))))
         (:img :ng-class "{spinner: true, hide: feeds.result !== undefined}" :src "/static/images/spinner.gif" "")
         (:section :ng-class "{feed: true, closed: !feed.closed}" :ng-repeat "feed in feeds.result"
@@ -190,25 +189,27 @@
 
 ; ; ;  Ultimately, this will only serialize the feed if the client
 (cl-oid-connect:def-route ("/feeds/add" (params) :method :post :app *app*)
-  (ningle.context:with-context-variables (session)
-    (cl-oid-connect:require-login
-      (let ((user-info (car (gethash :app-user session)))
-            (result '(302 (:location "/")))
-            (api (string= (cl-oid-connect:assoc-cdr "api" params) "yes"))) 
+  (ningle.context:with-context-variables (session) 
+    (let ((user-info (car (gethash :app-user session)))
+          (result '(302 (:location "/")))
+          (api (string= (cl-oid-connect:assoc-cdr "api" params 'string=) "yes")) 
+          (url (cl-oid-connect:assoc-cdr "url" params 'string=)) 
+          (plump-parser:*tag-dispatchers* plump-parser:*xml-tags*))
+      (cl-oid-connect:require-login
         (when (neither-null params user-info)
           (handler-case
-            (let* ((url (cl-oid-connect:assoc-cdr "url" params 'string=))
-                   (feed (drakma:http-request url))
-                   (plump-parser:*tag-dispatchers* plump-parser:*xml-tags*)
-                   (doc (plump:parse feed)))
-              (store-feed doc (slot-value user-info 'id))
+            (let* ((doc (plump:parse (drakma:http-request url)))
+                   (uid (slot-value user-info 'id))
+                   (added-feed (store-feed doc uid)))
               (when api
-                (setf result `(200 (:Content-Type "application/json") ,(jsonapi-encoder t "success")))))
-            (cl-postgres-error:unique-violation ()
-                                                (when api
-                                                  (setf result
-                                                        `(400 () ,(jsonapi-encoder nil "Feed already saved")))))))
-        result))))
+                (setf result `(200 (:Content-Type "application/json") ,(jsonapi-encoder t added-feed)))))
+            (cl-postgres-error:unique-violation
+              ()
+              (when api
+                (setf result
+                      `(400 () ,(jsonapi-encoder nil "Feed already saved"))))))))
+      result)))
+
 ;;; TODO: add needs to return the new content, so that angular can append it
 
 (cl-oid-connect:def-route ("/feeds/json" (params) :app *app*)
@@ -399,3 +400,4 @@
                 *app*)) :port 9090 :server server)
           *handler*)))
 
+; vim: foldmethod=marker foldmarker=(,) foldminlines=3 :

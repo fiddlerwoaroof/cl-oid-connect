@@ -34,68 +34,83 @@
 
 (load "tables.lisp")
 
-(setf (symbol-function 'rss-item-encoder)
-      (jonathan.helper:compile-encoder () (title link description category comments enclosure guid
-                                                 pub-date source)
-        (list :|title| title :|link| link :|description| description
-              :|category| category :|comments| comments :|enclosure| enclosure
-              :|guid| guid :|pub-date| pub-date :|source| source)))
+(defmethod jonathan:%to-json ((obj rss-feed)) (jonathan:%to-json (serialize obj
+                                                                            #'alexandria:alist-hash-table
+                                                                            #'%json-pair-transform)))
+(defmethod jonathan:%to-json ((obj rss-item)) (jonathan:%to-json (serialize obj
+                                                                            #'alexandria:alist-hash-table
+                                                                            #'%json-pair-transform)))
 
-(setf (symbol-function 'rss-feed-encoder)
-      (jonathan.helper:compile-encoder () (title link description items)
-        (list :|title| title :|link| link :|description| description :|items| items)))
+(defun alist-string-hash-table (alist)
+  (alexandria:alist-hash-table alist :test #'string=))
 
-(defmethod jonathan:%to-json ((obj rss-feed))
-  (jonathan:with-object
-    (jonathan:write-key-value "title" (coerce (rss-feed-title obj) 'simple-string))
-    (jonathan:write-key-value "link" (coerce (rss-feed-link obj) 'simple-string))
-    (jonathan:write-key-value "description" (coerce (rss-feed-description obj) 'simple-string))
-    (jonathan:write-key-value "items" (rss-feed-items obj))))
+(defun transform-alist (pair-transform alist)
+  (iterate (for (k . v) in-sequence alist)
+           (collect
+             (funcall pair-transform k v))))
 
-(defmethod jonathan:%to-json ((obj rss-item))
-  (jonathan:with-object
-    (jonathan:write-key-value "title" (coerce (rss-item-title obj) 'simple-string))
-    (jonathan:write-key-value "link" (coerce (rss-item-link obj) 'simple-string))
-    (jonathan:write-key-value "description" (coerce (rss-item-description-raw obj) 'simple-string))
-    ;(jonathan:write-key-value "category" (rss-item-category obj))
-    (jonathan:write-key-value "comments" (coerce (rss-item-comments obj) 'simple-string))
-    (jonathan:write-key-value "enclosure" "rss-item-enclosure obj")
-    (jonathan:write-key-value "guid" (coerce (rss-item-guid obj) 'simple-string))
-    (jonathan:write-key-value "date" (coerce (rss-item-pub-date obj) 'simple-string))
-    (jonathan:write-key-value "source" (coerce (rss-item-source obj) 'simple-string))))
+(defun %json-pair-transform (k v)
+  (cons (make-keyword k)
+        (typecase v
+          (string (coerce v 'simple-string))
+          (t v))))
+
+(defun %default-pair-transform (k v)
+  (cons (make-keyword (string-upcase k)) v))
 
 @export
-(defgeneric serialize (cls &rest links)
-  (:method ((obj list) &rest ignored)
-   (declare (ignore ignored))
-   (loop for item in obj
-         collect (serialize item)))
+(defgeneric serialize (cls &optional output-transform pair-transform)
+  (:method ((obj sequence) &optional (output-transform #'identity) (pair-transform #'%default-pair-transform))
+   (iterate (for item in-sequence obj)
+            (collect (serialize item output-transform pair-transform))))
 
-  (:method ((obj vector) &rest ignored)
-   (declare (ignore ignored))
-   (loop for item across obj
-         collect (serialize item)))
+  (:method ((obj rss-feed) &optional (output-transform #'identity) (pair-transform #'%default-pair-transform))
+   (funcall output-transform
+     (transform-alist pair-transform
+                      `(("title" . ,(rss-feed-title obj))
+                        ("link" . ,(rss-feed-link obj))
+                        ("description" . ,(rss-feed-description obj))
+                        ("items" . ,(iterate (for item in-sequence (rss-feed-items obj))
+                                           (collect (serialize item output-transform pair-transform))))))))
 
-  (:method ((obj rss-feed) &rest ignored)
-   (declare (ignore ignored))
-   (let ((feed (postmodern:make-dao
-                 'rss_feed_store
-                 :title (rss-feed-title obj) :link (rss-feed-link obj) :description (rss-feed-description obj))))
-     (format t "~a~%" (rfs-link feed))
-     (loop for item in (rss-feed-items obj)
-           collect (serialize item (rfs-id feed)))
-     feed))
+  (:method ((obj rss-item) &optional (output-transform #'identity) (pair-transform #'%default-pair-transform))
+   (funcall output-transform
+     (transform-alist pair-transform
+                      `(("title" . ,(rss-item-title obj))
+                        ("link" . ,(rss-item-link obj))
+                        ("description" . ,(rss-item-description-raw obj))
+                        ("guid" . ,(rss-item-guid obj))
+                        ("pub-date" . ,(rss-item-pub-date obj))
+                        ("source" . ,(rss-item-source obj)))))))
 
-  (:method ((obj rss-item) &rest links)
-   (let ((feed (car links)))
-     (format t "~a~%" feed)
-     (postmodern:make-dao 'rss_item_store
-                          :title (rss-item-title obj)
-                          :link (rss-item-link obj)
-                          :description (rss-item-description-raw obj)
-                          :guid (rss-item-guid obj) :pub-date (rss-item-pub-date obj)
-                          :source (rss-item-source obj)
-                          :feed feed))))
+@export
+(defun store-feed-dao (serialized-rss-feed &optional link)
+  (declare (ignore link))
+  (let* ((items nil)
+         (rss_feed (eval `(postmodern:make-dao
+                            'rss_feed_store
+                            ,@(iterate (for (k . v) in-sequence serialized-rss-feed)
+                                       (if (eql k :items)
+                                         (setf items v)
+                                         (appending (list k v))))))))
+    (iterate (for item in items)
+             (store-item-dao item (slot-value rss_feed 'id)))
+    rss_feed))
+
+@export
+(defun store-item-dao (rss-item link)
+ (eval `(postmodern:make-dao
+          'rss_item_store
+          :feed ,link
+          ,@(iterate (for (k . v) in-sequence rss-item)
+                     (appending (list k v))))))
+
+#|
+(:documentation
+  "Store a serialized rss object into rhe database: the basic idea here is
+   that the quasi-quoted expression generates a form that would insert the
+   item and then we eval it.")
+|#
 
 @export
 (defmacro copy-slots (slots from-v to-v)
@@ -104,7 +119,6 @@
         ,@(loop for (fro-slot to-slot)
                 in (mapcar (lambda (x) (if (symbolp x) (list x x) x)) slots)
                 collect `(setf (slot-value ,to ',to-slot) (slot-value ,from ',fro-slot))))))
-
 
 @export
 (defun deserialize-item (item)
@@ -197,7 +211,7 @@
            (description-munged (dehtml description-raw))
            (category (get-category-names (lquery:$ "category"))))
            ;(enclosure) --- TODO: implement comment / enclosure handling
-           
+
       (xml-text-bind (title link guid pub-date source comments)
         (make-instance 'rss-item :item item
                        :title title :link link :description-raw description-raw :description description-munged
@@ -223,6 +237,7 @@
            (feedid (anaphora:aif (postmodern:query (:select 'id :from 'rssfeed
                                                     :where (:= 'link (rss-feed-link rss-feed-))))
                      (caar anaphora:it) ;; The postmodern query returns a nested list
-                     (slot-value (serialize rss-feed-) 'id))))
+                     (slot-value (store-feed-dao (serialize rss-feed-)) 'id))))
       (postmodern:query
-        (:insert-into 'subscriptions :set 'uid uid 'feedid feedid)))))
+        (:insert-into 'subscriptions :set 'uid uid 'feedid feedid))
+      rss-feed-)))
