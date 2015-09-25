@@ -1,4 +1,5 @@
 (ql:quickload :parenscript)
+(ql:quickload :cl-markup)
 
 (defpackage :angular
   (:use :parenscript :cl)
@@ -20,12 +21,6 @@
 (defmacro+ps scope-var (name value)
   `(setf ($s ,name) ,value))
 
-(defmacro+ps resource (name url params &body body)
-  `(var ,name
-        ($resource ,url ,(cons 'create params)
-                   ,(cons 'create (loop for (name form) in body
-                                         append (list name (cons 'create form)))))))
-
 (defmacro+ps scope-function (name arguments &body body)
   `(scope-var ,name (lambda ,arguments
                       ,@body)))
@@ -37,18 +32,49 @@
          (lambda ,(loop for x in dependencies
                         collect x)
            ,@body
-           nil)))
+           )))
 
 
 ; This is just for slimv's sake
 (defmacro defcontroller (name dependencies &body body)
   (declare (ignore name dependencies body)))
 
-(defpsmacro def-module (module-name dependencies &body body)
-  `(macrolet ((defcontroller (name dependencies &body body)
+
+(defmacro+ps resource (name url params &body body)
+  `(var ,name
+        ($resource ,url ,(cons 'create params)
+                   ,(cons 'create (loop for (name form) in body
+                                         append (list name (cons 'create form)))))))
+
+
+(defpsmacro defdirective (module-name name dependencies &body body)
+  (let ((dependencies (cons '$scope dependencies)))
+    `(chain ,module-name
+            (directive ,(symbol-to-js-string name)
+                       ,(build-lambda dependencies
+                                      `((create
+                                          ,@body)))))))
+(defpsmacro markup (&body body)
+  `(lisp (cl-markup:markup ,@body)))
+
+(defun def-module-function (module-name block-name function-name)
+  `(,block-name (name dependencies &body body)
                 (let ((dependencies (cons '$scope dependencies)))
-                  (list 'chain ',module-name `(controller ,(symbol-to-js-string name)
-                                                          ,(build-lambda dependencies body))))))
+                  `(chain ,',module-name
+                          (,',function-name ,(symbol-to-js-string name)
+                                            ,(build-lambda dependencies body))))))
+
+(defmacro+ps defmodule (module-name dependencies &body body)
+  `(macrolet ((defdirective (name dependencies &body body)
+                (let ((dependencies (cons '$scope dependencies)))
+                  `(chain ,',module-name
+                          (directive ,(symbol-to-js-string name)
+                                     ,(build-lambda dependencies
+                                                    `((create
+                                                        ,@body)))))))
+
+              ,(def-module-function module-name 'defservice 'service)
+              ,(def-module-function module-name 'defcontroller 'controller))
      (progn (var ,module-name ((@ angular module) ,(symbol-to-js-string module-name) ,dependencies))
             ,@body)))
 

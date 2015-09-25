@@ -10,11 +10,10 @@ whitespace.controller('MainCtrl', ['$scope', '$http', '$resource', '$sce', funct
     $scope.toggleClosed = function (ent) {
         return ent.closed = !ent.closed;
     };
-    $scope.addFeed = function () {
+    return $scope.addFeed = function () {
         return feeds.add({ 'url' : $scope.addForm.url, 'api' : 'yes' }).$promise.then(function (feed) {
             return $scope.feeds.result.unshift(feed.result);
         });
     };
-    return null;
 }]);
 

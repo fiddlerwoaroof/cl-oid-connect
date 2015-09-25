@@ -1,7 +1,7 @@
 (in-package :angular)
 
 ;:action "/feeds/add?api=yes" :name "add-form" :id "add-form" :method "post" 
-(def-module whitespace '(ng-resource ng-sanitize)
+(defmodule whitespace '(ng-resource ng-sanitize)
   (defcontroller -Main-Ctrl ($http $resource $sce)
     (resource feeds "/feeds" nil
               (json (method "GET" url "/feeds/json"))

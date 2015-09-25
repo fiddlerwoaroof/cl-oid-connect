@@ -54,8 +54,8 @@
 (sheeple:defreply get-user-info ((a =endpoint-schema=) (b sheeple:=string=)))
 (sheeple:defreply get-access-token ((a =endpoint-schema=) (b sheeple:=string=)))
 
-(defparameter *FBOOK-INFO* (sheeple:clone =service-info=))
-(defparameter *GOOG-INFO* (sheeple:clone =service-info=))
+(defparameter *fbook-info* (sheeple:clone =service-info=))
+(defparameter *goog-info* (sheeple:clone =service-info=))
 (defparameter *endpoint-schema* nil)
 ; goog is well behaved
 (defparameter *goog-endpoint-schema* (defobject (=endpoint-schema= *goog-info*)))
@@ -212,89 +212,112 @@
                                          ("access_token" . ,access-token))
                            ))))
 
+(defun google-login-entry (params)
+  (declare (ignore params))
+  (with-context-variables (session)
+    (let ((state (gen-state 36)))
+      (setf (gethash :state session) state)
+      (with-endpoints *goog-endpoint-schema*
+        (setf (gethash :endpoint-schema session) *goog-endpoint-schema*)
+        (multiple-value-bind (content rcode headers) (do-auth-request *goog-endpoint-schema* state)
+          (if (< rcode 400)
+            `(302 (:location ,(cdr (assoc :location headers))))
+            content))))))
 
-(defun oauth2-login-middleware (&key google-info facebook-info (login-callback #'identity))
-  (lambda (app)
-    ;(in-package :cl-oid-connect)
-    (load-facebook-info facebook-info)
-    (load-goog-endpoint-schema)
-    (load-google-info google-info)
+(defun facebook-login-entry (params)
+  (declare (ignore params))
+  (let ((session (ningle:context :session))
+        (state (gen-state 36)))
+      (setf (gethash :state session) state)
+      (with-endpoints *fbook-endpoint-schema*
+        (setf (gethash :endpoint-schema session) *fbook-endpoint-schema*)
+        (multiple-value-bind (content rcode headers uri) (do-auth-request *fbook-endpoint-schema* state)
+          (declare (ignore headers))
+          (if (< rcode 400)
+            `(302 (:location ,(format nil "~a" uri)))
+            content)))))
 
-    (def-route ("/login/google" (params) :app app)
-      (with-context-variables (session)
-        (let ((state (gen-state 36)))
-          (setf (gethash :state session) state)
-          (with-endpoints *goog-endpoint-schema*
-            (setf (gethash :endpoint-schema session) *goog-endpoint-schema*)
-            (multiple-value-bind (content rcode headers) (do-auth-request *goog-endpoint-schema* state)
-              (if (< rcode 400)
-                `(302 (:location ,(cdr (assoc :location headers))))
-                content))))))
+(defun google-callback (login-callback)
+  (lambda (params)
+    (let ((received-state (cdr (string-assoc "state" params)))
+          (code (cdr (string-assoc "code" params))))
+      (check-state received-state
+                   (with-context-variables (session)
+                     (with-endpoints *goog-endpoint-schema*
+                       (let* ((a-t (get-access-token *goog-endpoint-schema* code))
+                              (access-token (assoc-cdr :access--token a-t)) ;; Argh
+                              (id-token (assoc-cdr :id--token a-t))
+                              (decoded (cljwt:decode id-token :fail-if-unsupported nil))
+                              (user-info (get-user-info *goog-endpoint-schema* access-token)))
+                         (setf (gethash :idtoken session) id-token
+                               (gethash :accesstoken session) access-token
+                               (gethash :userinfo session) user-info
+                               (gethash :app-user session) (funcall login-callback
+                                                                    user-info
+                                                                    decoded
+                                                                    access-token))
+                         '(302 (:location "/"))
+                         )))
+                   '(403 '() "Out, vile imposter!")))))
 
+(defmacro setup-session ((session) &rest rest &key nonsense &allow-other-keys)
+  (declare (ignorable nonsense))
+  (cons 'progn
+        (iterate:iterate (iterate:for key   in rest       by #'cddr )
+                         (iterate:for value in (cdr rest) by #'cddr)
+                         (iterate:collect `(setf (gethash ,(alexandria:make-keyword (key)) ,session) ,value)))))
 
-    (def-route ("/login/facebook" (params) :app app)
-      (let ((session (ningle:context :session)))
-        (let ((state (gen-state 36)))
-          (setf (gethash :state session) state)
-          (with-endpoints *fbook-endpoint-schema*
-            (setf (gethash :endpoint-schema session) *fbook-endpoint-schema*)
-            (multiple-value-bind (content rcode headers uri) (do-auth-request *fbook-endpoint-schema* state)
-              (declare (ignore headers))
-              (if (< rcode 400)
-                `(302 (:location ,(format nil "~a" uri)))
-                content))))))
+(defun vars-to-symbol-macrolets (vars obj)
+  (iterate:iterate (iterate:for var in vars)
+                   (iterate:collect `(,var (gethash ,(alexandria:make-keyword var) ,obj)))))
 
-    (def-route ("/oidc_callback/google" (params) :app app)
-      (let ((received-state (cdr (string-assoc "state" params)))
-            (code (cdr (string-assoc "code" params))))
+(defmacro with-session-values (vars session &body body)
+  (alexandria:once-only (session)
+    `(symbol-macrolet ,(vars-to-symbol-macrolets vars session)
+       ,@body)))
+
+(defun facebook-callback (login-callback)
+  (lambda (params)
+    (let ((received-state (cdr (string-assoc "state" params)))
+          (code (cdr (string-assoc "code" params))))
+      (with-endpoints *fbook-endpoint-schema*
         (check-state received-state
-                     (with-context-variables (session)
-                       (with-endpoints *goog-endpoint-schema*
-                         (let* ((a-t (get-access-token *goog-endpoint-schema* code))
-                                (access-token (assoc-cdr :access--token a-t)) ;; Argh
-                                (id-token (assoc-cdr :id--token a-t))
-                                (decoded (cljwt:decode id-token :fail-if-unsupported nil))
-                                (user-info (get-user-info *goog-endpoint-schema* access-token)))
-                           (setf (gethash :idtoken session) id-token)
-                           (setf (gethash :accesstoken session) access-token)
-                           (setf (gethash :userinfo session) user-info)
-                           (setf (gethash :app-user session)
-                                 (funcall login-callback user-info decoded access-token))
-                           '(302 (:location "/"))
-                           )))
-                     '(403 '() "Out, vile imposter!"))))
+                     (let* ((a-t (get-access-token *fbook-endpoint-schema* code))
+                            (id-token (assoc-cdr :access--token a-t))
+                            (user-info (get-user-info *fbook-endpoint-schema* id-token)))
+                       (with-session-values (accesstoken userinfo idtoken app-user) (context :session)
+                                            (setf accesstoken a-t
+                                                  userinfo user-info
+                                                  idtoken id-token
+                                                  app-user (funcall login-callback user-info id-token a-t)))
 
+                         '(302 (:location "/")))
+                     '(403 '() "Out, vile imposter!"))))))
 
-    (def-route ("/oidc_callback/facebook" (params) :app app)
-      (let ((received-state (cdr (string-assoc "state" params)))
-            (code (cdr (string-assoc "code" params))))
-        (with-endpoints *fbook-endpoint-schema*
-          (check-state received-state
-                       (with-context-variables (session)
-                         (let* ((a-t (get-access-token *fbook-endpoint-schema* code))
-                                (id-token (assoc-cdr :access--token a-t))
-                                (user-info (get-user-info *fbook-endpoint-schema* id-token)))
-                           (setf (gethash :accesstoken session) a-t)
-                           (setf (gethash :userinfo session) user-info)
-                           (setf (gethash :idtoken session) id-token)
-                           (setf (gethash :app-user session) (funcall login-callback user-info id-token a-t))
+(defun userinfo-route (params)
+  (declare (ignore params))
+  (with-context-variables (session)
+    (require-login
+      (with-endpoints  (gethash :endpoint-schema session)
+        (cl-json:encode-json-to-string (gethash :userinfo session))))))
 
-                           '(302 (:location "/"))))
-                       '(403 '() "Out, vile imposter!")))))
+(defun logout-route (params)
+  (declare (ignore params))
+  (with-context-variables (session)
+    (setf (gethash :userinfo session) nil)
+    '(302 (:location "/"))))
 
-    (def-route ("/userinfo.json" (params) :app app)
-      (with-context-variables (session)
-        (require-login
-          (with-endpoints  (gethash :endpoint-schema session)
-            (cl-json:encode-json-to-string (gethash :userinfo session))))))
-
-    (def-route ("/logout" (params) :app app)
-      (with-context-variables (session)
-        (setf (gethash :userinfo session) nil)
-        '(302 (:location "/"))))
-
-    app))
-
+(defun oauth2-login-middleware (app &key google-info facebook-info (login-callback #'identity))
+  (load-facebook-info facebook-info)
+  (load-goog-endpoint-schema)
+  (load-google-info google-info)
+  (setf (route app "/userinfo.json" :method :get) #'userinfo-route
+        (route app "/logout"  :method :get) #'logout-route
+        (route app "/login/google" :method :get) #'google-login-entry
+        (route app "/login/facebook" :method :get) #'facebook-login-entry 
+        (route app "/oidc_callback/google" :method :get) (google-callback login-callback)
+        (route app "/oidc_callback/facebook" :method :get) (facebook-callback login-callback))
+  (lambda (app) (lambda (env) (funcall app env))))
 
 (defmacro redirect-if-necessary (sessionvar &body body)
   (with-gensyms (session)

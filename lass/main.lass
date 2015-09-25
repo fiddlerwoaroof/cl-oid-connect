@@ -1,9 +1,9 @@
 (:import "url(https://fonts.googleapis.com/css?family=Lato:400,100,300,400italic,300italic,700,700italic,900&subset=latin,latin-ext)")
 (:import "url(https://fonts.googleapis.com/css?family=Caudex)")
 
-((:or .feed main)
-  :-webkit-backface-visibility hidden;
-  :-webkit-transform "translateZ(0)")
+;((:or .feed main)
+;  :-webkit-backface-visibility hidden;
+;  :-webkit-transform "translateZ(0)")
 
 (*
   :box-sizing "border-box"
@@ -11,6 +11,7 @@
   :padding "0px")
 
 (body
+  :transition "background-color .5s ease"
   :font-family "Lato")
 
 (((:or main "#sidebar" .feed) > (:or ul ol))
@@ -51,9 +52,8 @@
   (ul.menu
     :text-align right
     :font-variant small-caps
-    :opacity 0
     (li
-      :transition "all 0.25s ease"
+      :transition "all .5s ease"
       (a
         :color inherit
         :display block
@@ -62,17 +62,21 @@
         :padding "0.5em"
         :text-decoration none
         :width "100%"
-        )))
-  (ul.menu.open
-    :opacity 1))
+        ))))
 
 (main
   :width "62vw"
   :float "right"
   :clear "right"
-  :overflow-x "hidden"
-  :overflow-y "scroll"
-  :position "relative")
+  :overflow "hidden"
+  :position "relative"
+  ((> div)
+   :position "absolute"
+   :top "2em"
+   :bottom "0em"
+   :width "100%"
+   :overflow-y "scroll")
+  )
 
 (img.spinner
   :position "absolute"
@@ -89,12 +93,12 @@
   ((:or h2 h3) :padding "0.62em")
   (h2 :padding-bottom "0.38em")
   (h3 :padding-top "0.38em")
-  :transition "background-color 0.25s ease"
+  :transition "background-color .5s ease"
   :padding-bottom "0em")
 
 ((.link.closed .link-content) 
-  :max-height "0px"
-  :padding "0em")  
+ :max-height "0px"
+ :padding "0em")  
 
 (.link.closed
   :padding-bottom "0em")
@@ -108,7 +112,7 @@
     :padding "1em"
     :padding-bottom "0em"
     :cursor pointer
-    :transition "background-color 0.25s ease"
+    :transition "background-color .5s ease"
     (h4
       :margin-bottom "0.5em"
       :display "inline-block")) 
@@ -129,7 +133,7 @@
    :clear both)
   (.link-content
     :overflow hidden
-    
+
     (img
       :margin "1em" "0%" "1em" "10%"
       :max-width "80%"
@@ -157,27 +161,34 @@
     :transition "max-height 0.5s ease"))
 
 ("#add-form"
-  :font-size "1em"
-  :height "1.8em"
-  :display block
-  :overflow hidden
-  :width "100%"
+ :transition "background-color .5s ease"
+ :font-size "1em"
+ :height "1.8em"
+ :display block
+ :overflow hidden
+ :width "100%"
+ :position absolute
+ :z-index 3
 
-  (input
-    :border "none"
-    :width "95%"
-    :height "100%"
-    :font-size "0.8em"
-    :line-height "1.8em"
-    :padding "1em" "0.5em"
-    )
-  (button
-    :border none
-    :border-radius 0px
-    :font-size inherit
-    :width "5%" 
-    :height "100%"
-    ))
+ ((:or input button)
+  :transition "background-color .5s ease"
+  )
+
+ (input
+   :border "none"
+   :width "95%"
+   :height "100%"
+   :font-size "0.8em"
+   :line-height "1.8em"
+   :padding "1em" "0.5em"
+   )
+ (button
+   :border none
+   :border-radius 0px
+   :font-size inherit
+   :width "5%" 
+   :height "100%"
+   ))
 
 
 (.flip-button

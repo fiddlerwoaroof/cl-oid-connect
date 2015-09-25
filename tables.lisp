@@ -1,3 +1,6 @@
+(in-package :cl-user)
+(defpackage :whitespace.tables
+  (:use #:cl #:alexandria #:postmodern #:annot.class))
 (in-package :whitespace.tables)
 (cl-annot.syntax:enable-annot-syntax)
 
@@ -6,16 +9,14 @@
   ((id          :col-type serial :initarg :id          :accessor rfs-id)
    (title       :col-type text   :initarg :title       :accessor rfs-title       :col-default "")
    (link        :col-type text   :initarg :link        :accessor rfs-link        :col-default "")
-   (description :col-type text   :initarg :description :accessor rfs-description :col-default ""))
-  (:metaclass postmodern:dao-class)
-  (:table-name "rssFeed")
-  (:unique link)
+   (description :col-type text   :initarg :description :accessor rfs-description :col-default "")
+   (fetch-url   :col-type text   :initarg :fetch-url :accessor rfs-fetch-url   :col-default ""))
+  (:metaclass dao-class)
   (:keys id))
 
-(postmodern:deftable rss_feed_store
-  (postmodern:!dao-def)
-  (postmodern:!unique "link")
-  )
+(deftable rss_feed_store
+  (!dao-def)
+  (!unique "link"))
 
 
 @export-class
@@ -30,12 +31,13 @@
    (pub-date    :col-type text    :initarg :pub-date    :accessor ris-pub-date    :col-default "")
    (source      :col-type text    :initarg :source      :accessor ris-source      :col-default "")
    (feed        :col-type integer :initarg :feed        :accessor ris-feed))
-  (:metaclass postmodern:dao-class)
+  (:metaclass dao-class)
   (:keys id))
 
-(postmodern:deftable rss_item_store
-  (postmodern:!dao-def)
-  (postmodern:!foreign "rssfeed" "feed" "id" :on-delete :cascade :on-update :cascade))
+(deftable rss_item_store
+  (!dao-def)
+  (!foreign "rss_feed_store" "feed" "id" :on-delete :cascade :on-update :cascade)
+  (!unique "guid"))
 
 
 @export-class
@@ -50,11 +52,11 @@
    (last-name :col-type (or string s-sql:db-null) :initarg :last-name :accessor user-last-name)
    (link :col-type (or string s-sql:db-null) :initarg :link :accessor user-link)
    (locale :col-type (or string s-sql:db-null) :initarg :locale :accessor user-locale))
-  (:metaclass postmodern:dao-class)
+  (:metaclass dao-class)
   (:keys id))
 
-(postmodern:deftable reader_user
-  (postmodern:!dao-def))
+(deftable reader_user
+  (!dao-def))
 
 @export-class
 (defclass subscriptions ()
@@ -62,16 +64,23 @@
    (uid :col-type integer :initarg :uid :accessor subscription-uid)
    (feedid :col-type integer :initarg :feedid :accessor subscription-feedid))
   (:unique (uid feedid))
-  (:metaclass postmodern:dao-class)
+  (!foreign "rss_feed_store" "feedid" "id" :on-delete :cascade :on-update :cascade)
+  (:metaclass dao-class)
   (:keys id))
 
-(postmodern:deftable subscriptions
-  (postmodern:!dao-def)
-  (postmodern:!unique '(uid feedid)))
+(deftable subscriptions
+  (!dao-def)
+  (!foreign "rss_feed_store" "feedid" "id" :on-delete :cascade :on-update :cascade)
+  (!foreign "reader_user" "uid" "id" :on-delete :cascade :on-update :cascade)
+  (!unique '(uid feedid)))
 
-; (postmodern:create-table 'rss_feed_store)
-; (postmodern:create-table 'rss_item_store)
-; (postmodern:create-table 'reader_user)
-; (postmodern:create-table 'subscriptions)
+#|
 
+(with-connection whitespace::*db-connection-info* 
+  (with-transaction ()
+    (create-table 'rss_feed_store)
+    (create-table 'rss_item_store)
+    (create-table 'reader_user)
+    (create-table 'subscriptions)))
 
+|#

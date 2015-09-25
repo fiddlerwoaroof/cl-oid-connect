@@ -23,13 +23,6 @@
   (:use #:cl))
 (load "utils.lisp")
 
-(defpackage :whitespace.tables
-  (:use #:cl #:alexandria #:postmodern #:annot.class))
-(load "tables.lisp")
-
-(defpackage :whitespace.rss
-  (:use #:cl #:alexandria #:postmodern #:lquery #:cl-syntax #:cl-annot.syntax #:cl-annot.class
-        #:whitespace.tables #:iterate))
 (load "rss.lisp")
 
 (defpackage :whitespace
@@ -124,56 +117,7 @@
                              :href (format nil "#feed-~a" feed-count)
                              (rss-feed-title feed))))))))
 
-(defun base-template-f (&optional demo)
-  (cl-markup:xhtml5
-    (:head
-      (:title "Whitespace")
-      (:script :src "https://code.jquery.com/jquery-2.1.4.min.js" :type "text/javascript" "")
-      (:script :src "https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.5/angular.js" :type "text/javascript" "")
-      (:script :src "https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.5/angular-resource.js" :type "text/javascript" "")
-      (:script :src "https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.5/angular-sanitize.js" :type "text/javascript" "")
-      (:script :src "/static/js/fold.js" :type "text/javascript" "")
-      (:script :src "/static/js/whitespace-angular.js" :type "text/javascript" "")
-      (:link :rel "stylesheet" :href "/static/css/reset.css")
-      (:link :rel "stylesheet" :href "/static/css/baseline_post.css")
-      (:link :rel "stylesheet" :href "/static/css/formalize.css")
-      (:link :rel "stylesheet" :href "/static/css/main.css")
-      (:link :rel "stylesheet" :href "/static/css/content.css")
-      (:link :rel "stylesheet" :href "/theme/light.css")
-      (:link :rel "icon" :href "/static/images/Whitespace_favicon.png" :type "image/x-icon")
-      (:link :rel "shortcut icon" :href "/static/images/Whitespace_favicon.png" :type "image/x-icon"))
-
-    (:body :ng-app "whitespace" :ng-controller "MainCtrl"
-     (:header
-       (:button :class "flip-button" "…")
-       (:h1 "Whitespace")
-       )
-     (:section :id "content"
-      (:section :id "sidebar"
-       (cl-markup:raw (feedlist-markup *feeds*)))
-      (:main
-        (cl-markup:raw
-          (unless demo
-            (cl-markup:markup
-              (:form :name "add-form" :id "add-form" :ng-submit "addFeed()"
-               (:input :type "text" :name "url" :class "urltext" :ng-model "addForm.url" :placeholder "http://example.com/feed.rss . . ." "")
-               (:input :type "hidden" :name "api" :value "yes" "")
-               (:button :type "submit" :class "fsub" "+")))))
-        (:img :ng-class "{spinner: true, hide: feeds.result !== undefined}" :src "/static/images/spinner.gif" "")
-        (:section :ng-class "{feed: true, closed: !feed.closed}" :ng-repeat "feed in feeds.result"
-         (:section :class "feed-header" :ng-click "toggleClosed(feed)"
-          (:h2 "{{ feed.title }}")
-          (:h3 "{{ feed.description }}"))
-         (:ul :class "post-list"
-          (:li :ng-class "{link: true, closed: !item.closed}" :ng-repeat "item in feed.items"
-           (:section :class "link-header" :ng-click "toggleClosed(item)"
-            (:h4 "{{item.title}}")
-            (:p :class "link-info"
-             (:a :target "_blank" :ng-href "{{item.link}}" :class "link-url" "{{item.link}}")
-             (:span :class "link-date" "{{item.date}}")))
-           (:section :class "link-content"
-            (:div :ng-bind-html "renderHtml(item.description)" "")))))))
-      (:footer))))
+(load "base-template.lisp")
 
 (defmacro defun-from-value (name value)
   `(setf (symbol-function ',name) ,value))
@@ -190,7 +134,7 @@
 ; ; ;  Ultimately, this will only serialize the feed if the client
 (cl-oid-connect:def-route ("/feeds/add" (params) :method :post :app *app*)
   (ningle.context:with-context-variables (session) 
-    (let ((user-info (car (gethash :app-user session)))
+    (let ((user-info (gethash :app-user session))
           (result '(302 (:location "/")))
           (api (string= (cl-oid-connect:assoc-cdr "api" params 'string=) "yes")) 
           (url (cl-oid-connect:assoc-cdr "url" params 'string=)) 
@@ -199,10 +143,11 @@
         (when (neither-null params user-info)
           (handler-case
             (let* ((doc (plump:parse (drakma:http-request url)))
-                   (uid (slot-value user-info 'id))
-                   (added-feed (store-feed doc uid)))
-              (when api
-                (setf result `(200 (:Content-Type "application/json") ,(jsonapi-encoder t added-feed)))))
+                   (uid (slot-value user-info 'id)))
+              (multiple-value-bind (added-feed dao-feed) (store-feed doc) 
+                (subscribe-to-feed uid (slot-value dao-feed 'id))
+                (when api
+                  (setf result `(200 (:Content-Type "application/json") ,(jsonapi-encoder t added-feed))))))
             (cl-postgres-error:unique-violation
               ()
               (when api
@@ -235,8 +180,7 @@
     (let* ((received-id (anaphora:aif (cl-oid-connect:assoc-cdr :id userinfo)
                           anaphora:it
                           (cl-oid-connect:assoc-cdr :sub userinfo)))
-           (db-user (postmodern:query-dao 'reader_user (:select :* :from 'reader_user
-                                                        :where (:= :foreign-id received-id)))))
+           (db-user (car (postmodern:select-dao 'reader_user (:= :foreign-id received-id)))))
       (if (not (null db-user))
         db-user
         (progn
@@ -290,7 +234,6 @@
                    `(* :color ,(colors:colorscheme-fg *colorscheme*))
 
                    `(body
-                      :transition "background-color 0.25s ease"
                       :background-color ,(colors:colorscheme-bg *colorscheme*))
 
                    `((:or h1 h2 h3)
@@ -314,12 +257,13 @@
                        :font-size ,(combine-unit-q (* 0.25 header-height) height-units)))
 
                    `(main
-                      :border-left thin solid ,(colors:colorscheme-accent *colorscheme*)
+                      :border-left medium solid ,(colors:colorscheme-accent *colorscheme*)
                       :height ,(combine-unit-q (- 100 header-height) height-units)
-                      (.add-form
+                      ("#add-form"
+                        :box-shadow "0em" "0em" "0.2em" "0.2em" ,(colors:colorscheme-accent *colorscheme*)
                         ((:or input button)
-                          :background-color ,(colors:colorscheme-fg *colorscheme*)
-                          :color ,(colors:colorscheme-bg *colorscheme*))
+                         :background-color ,(colors:colorscheme-bg *colorscheme*)
+                         :color ,(colors:colorscheme-fg *colorscheme*))
                         )
                       )
 
@@ -379,6 +323,13 @@
 
 (ql:quickload :clack-middleware-postmodern)
 
+(defparameter oid-mw
+  (cl-oid-connect:oauth2-login-middleware
+    *app*
+    :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
+    :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json")
+    :login-callback #'login-callback))
+
 (defun start (&optional tmp)
   (let ((server (if (> (length tmp) 1)
                   (intern (string-upcase (elt tmp 1)) 'keyword)
@@ -392,12 +343,13 @@
                               (postmodern:with-connection *db-connection-info*
                                 (funcall app env))))
               (:static :path "/static/" :root #p"./static/")
-              (funcall
-                (cl-oid-connect:oauth2-login-middleware
-                  :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
-                  :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json")
-                  :login-callback #'login-callback)
-                *app*)) :port 9090 :server server)
+              *app*) :port 9090 :server server)
           *handler*)))
+
+
+(defun restart-clack ()
+  (do () ((null *handler*))
+    (stop))
+  (start))
 
 ; vim: foldmethod=marker foldmarker=(,) foldminlines=3 :
