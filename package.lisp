@@ -15,7 +15,9 @@
     #:lass
     #:lquery
     #:plump
-    #:sheeple)
+    #:sheeple
+    #:whitespace.utils
+    )
   (:export
     #:redirect-if-necessary
     #:def-route
@@ -24,5 +26,6 @@
     #:with-session
     #:assoc-cdr
     #:session ; private!!
+    #:vars-to-symbol-macrolets
     ))
 
