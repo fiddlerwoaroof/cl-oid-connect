@@ -13,17 +13,14 @@
 (ql:quickload :iterate)
 (ql:quickload :jonathan)
 
-(declaim (optimize (speed 0) (safety 2) (debug 2)))
+(declaim (optimize (speed 0) (safety 3) (debug 2)))
 
 (push (cons "application" "rdf+xml") drakma:*text-content-types*)
 (push (cons "application" "rss+xml") drakma:*text-content-types*)
 (push (cons "text" "rss+xml") drakma:*text-content-types*)
 
-(defpackage whitespace.utils
-  (:use #:cl))
-(load "utils.lisp")
-
 (load "rss.lisp")
+
 
 (defpackage :whitespace
   (:use #:cl #:whitespace.utils #:whitespace.rss #:whitespace.tables))

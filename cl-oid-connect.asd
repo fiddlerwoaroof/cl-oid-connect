@@ -17,9 +17,11 @@
                 :lquery
                 :plump
                 :cl-who
-                :postmodern)
+                :postmodern
+                :iterate)
   :serial t
-  :components ((:file "package")
+  :components ((:file "utils")
+               (:file "package")
                (:file "cl-oid-connect")))
 
 

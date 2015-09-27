@@ -35,6 +35,17 @@
 
 (in-package :cl-oid-connect)
 ; Should this be here?
+
+(eval-when (:compile-toplevel :execute)
+  (defun vars-to-symbol-macrolets (vars obj)
+    (iterate:iterate (iterate:for var in vars)
+                     (iterate:collect `(,var (gethash ,(alexandria:make-keyword var) ,obj))))))
+
+(defmacro with-session-values (vars session &body body)
+  (alexandria:once-only (session)
+    `(symbol-macrolet ,(vars-to-symbol-macrolets vars session)
+       ,@body)))
+
 (defparameter *oid* (make-instance 'ningle:<app>))
 (setf drakma:*text-content-types* (cons '("application" . "json") drakma:*text-content-types*))
 
@@ -57,14 +68,11 @@
 (defparameter *fbook-info* (sheeple:clone =service-info=))
 (defparameter *goog-info* (sheeple:clone =service-info=))
 (defparameter *endpoint-schema* nil)
-; goog is well behaved
 (defparameter *goog-endpoint-schema* (defobject (=endpoint-schema= *goog-info*)))
 
-(defun get-base-url (request) (format nil "~a//~a/oidc_callback"
-                                      (lack.request:request-query-parameters)
-                                      ))
+(defun get-base-url (request)
+  (format nil "~a//~a/oidc_callback" (lack.request:request-query-parameters)))
 
-; fbook needs personal attention
 (defproto *fbook-endpoint-schema* (=endpoint-schema= *fbook-info*)
           ((auth-endpoint "https://www.facebook.com/dialog/oauth")
            (token-endpoint "https://graph.facebook.com/v2.3/oauth/access_token")
@@ -266,15 +274,6 @@
         (iterate:iterate (iterate:for key   in rest       by #'cddr )
                          (iterate:for value in (cdr rest) by #'cddr)
                          (iterate:collect `(setf (gethash ,(alexandria:make-keyword (key)) ,session) ,value)))))
-
-(defun vars-to-symbol-macrolets (vars obj)
-  (iterate:iterate (iterate:for var in vars)
-                   (iterate:collect `(,var (gethash ,(alexandria:make-keyword var) ,obj)))))
-
-(defmacro with-session-values (vars session &body body)
-  (alexandria:once-only (session)
-    `(symbol-macrolet ,(vars-to-symbol-macrolets vars session)
-       ,@body)))
 
 (defun facebook-callback (login-callback)
   (lambda (params)

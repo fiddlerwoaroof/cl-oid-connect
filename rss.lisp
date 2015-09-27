@@ -1,55 +1,27 @@
 (in-package :cl-user)
+(declaim (optimize (safety 3) (speed 0) (debug 3)))
 
 (load "tables.lisp")
 
 (defpackage :whitespace.rss
   (:use #:cl #:alexandria #:postmodern #:lquery #:cl-syntax #:cl-annot.syntax #:cl-annot.class
-        #:whitespace.tables #:iterate)
+        #:whitespace.tables #:iterate #:whitespace.utils)
   (:import-from anaphora it))
 
 
 (in-package :whitespace.rss)
 (cl-annot.syntax:enable-annot-syntax)
 
-(defun ensure-mapping (list)
-  "Make sure that each item of the list is a pair of symbols"
-  (mapcar (lambda (x) (if (symbolp x) (list x x) x)) list))
-
-(defun alist-string-hash-table (alist)
-  (alexandria:alist-hash-table alist :test #'string=))
-
-(defun transform-alist (pair-transform alist)
-  (iterate (for (k . v) in-sequence alist)
-           (collect
-             (funcall pair-transform k v))))
-
-(defun %json-pair-transform (k v)
-  (cons (make-keyword (string-downcase k))
-        (typecase v
-          (string (coerce v 'simple-string))
-          (t v))))
-
-(defun %default-pair-transform (k v)
-  (cons (make-keyword (string-upcase k)) v))
-
-(defun make-pairs (symbols)
-  (cons 'list (iterate (for (key value) in symbols)
-                       (collect (list 'list* (symbol-name key) value)))))
-
-@export
-(defmacro copy-slots (slots from-v to-v)
-  (with-gensyms (from to)
-    `(let ((,from ,from-v) (,to ,to-v))
-       ,@(iterate (for (fro-slot to-slot) in (ensure-mapping slots))
-                  (collect `(setf (slot-value ,to ',to-slot) (slot-value ,from ',fro-slot))))
-       ,to)))
-
-@export
-(defmacro default-when (default test &body body)
-  (once-only (default)
-    `(or (when ,test
-           ,@body)
-         ,default)))
+(lquery:define-lquery-list-function tag-name (nodes &rest tags)
+  "Manipulate elements on the basis of their tag-name.
+   With no arguments, return their names else return
+   the corresponding tags."
+  (if (null tags)
+    (map 'vector #'plump:tag-name nodes)
+    (apply #'vector
+           (loop for node across nodes
+                 if (find (plump:tag-name node) tags :test #'string=)
+                 collect node))))
 
 @export
 (defmacro get-elements (feed &optional (filter nil))
@@ -66,18 +38,6 @@
 @export
 (defmacro extract-text (selector &optional (default ""))
   `(or (lquery:$ ,selector (text) (node)) ,default))
-
-(defmacro transform-result ((list-transform pair-transform) &body alist)
-    `(funcall ,list-transform
-              (transform-alist ,pair-transform
-                               ,@alist)))
-
-
-(defmacro slots-to-pairs (obj (&rest slots))
-  (alexandria:once-only (obj)
-    (let ((slots (ensure-mapping slots)))
-      `(with-slots ,(mapcar #'cadr slots) ,obj
-         ,(make-pairs slots)))))
 
 (defmacro defserializer ((specializes) &body slots)
   (with-gensyms (obj o-t p-t)
@@ -152,7 +112,7 @@
                   (collect item))))
 
 (defserializer (rss-item)
-  title link (description description-raw) guid pub-date source)
+  title link (description description-raw :bind-from description-raw) guid pub-date source)
 
 ; this is the interface to be used
 (defserializer (rss_feed_store)
@@ -189,10 +149,12 @@
        (make-instance-from-symbols 'rss_item_store id title link (description description-raw)
                                    guid pub-date source feed (fetch-defaults t))))))
 
+(define-condition blarg () ((text :initarg text)))
 @export
 (defun get-feed-from-dao (rss-feed)
   (let ((feed-dao (get-dao-for rss-feed)))
     (list feed-dao
+          (error 'blarg :text (format t "~a~%" rss-feed))
           (with-slots (items) rss-feed
             (iterate (for item in items)
                      (collect (get-dao-for item (slot-value feed-dao 'id))))))))
