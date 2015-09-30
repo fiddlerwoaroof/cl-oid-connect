@@ -21,7 +21,6 @@
 
 (load "rss.lisp")
 
-
 (defpackage :whitespace
   (:use #:cl #:whitespace.utils #:whitespace.rss #:whitespace.tables))
 

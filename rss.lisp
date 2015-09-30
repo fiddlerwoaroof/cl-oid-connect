@@ -84,6 +84,36 @@
    (source :accessor rss-item-source  :initarg :source)))
 
 @export
+(defun make-rss-item (item)
+  (lquery:initialize item)
+  (flet ((dehtml (h) (plump:text (plump:parse h)))
+         (get-category-names (it) ;;; TODO: simplify this---Ask Shinmera on IRC
+           (if (not (equalp #() it))
+             (map 'vector
+                  (lambda (x) (plump:text (elt (plump:children x) 0)))
+                  it)
+             #())))
+    (let* ((content-encoded (lquery:$ (children) (tag-name "content:encoded")))
+
+           (description-element (default-when content-encoded (emptyp content-encoded)
+                                  (lquery:$ (children "description"))))
+
+           (description-raw (normalize-html
+                              (default-when description-element (emptyp description-element)
+                                (extract-text "description"))))
+
+           (description-munged (dehtml description-raw))
+           (category (get-category-names (lquery:$ "category"))))
+           ;(enclosure) --- TODO: implement comment / enclosure handling
+
+      (xml-text-bind (title link guid pub-date source comments)
+        (make-instance-from-symbols 'rss-item
+                                    item title link description-raw (description description-munged)
+                                    category guid pub-date source comments)))))
+      ;(setf (rss-item-enclosure result) enclosure)      -- TODO: comment/enclosure . . .
+
+
+@export
 (defun make-rss-feed (feed)
   (lquery:initialize feed)
   (let* ((channel (lquery:$ "channel" (node)))
@@ -146,15 +176,18 @@
   (:method ((obj rss-item) &optional feed)
    (with-slots (title link description-raw guid pub-date source) obj
      (get-id-for-object (rss_item_store guid) guid
-       (make-instance-from-symbols 'rss_item_store id title link (description description-raw)
-                                   guid pub-date source feed (fetch-defaults t))))))
+       (let ((result (make-instance-from-symbols 'rss_item_store title link (description description-raw)
+                                   guid pub-date source feed (fetch-defaults t))))
+         (unless (null id)
+           (setf (ris-id result) id))
+         result)))))
 
 (define-condition blarg () ((text :initarg text)))
 @export
 (defun get-feed-from-dao (rss-feed)
   (let ((feed-dao (get-dao-for rss-feed)))
     (list feed-dao
-          (error 'blarg :text (format t "~a~%" rss-feed))
+          ;(error 'blarg :text (format t "~a~%" rss-feed))
           (with-slots (items) rss-feed
             (iterate (for item in items)
                      (collect (get-dao-for item (slot-value feed-dao 'id))))))))
@@ -167,7 +200,13 @@
       (postmodern:upsert-dao feed)
       (mapcar #'postmodern:upsert-dao items))))
 
-; TODO: get rid of eval
+@export
+(defun store-item-dao (serialized-rss-item link)
+  (apply #'postmodern:make-dao
+         (list* 'rss_item_store :feed link
+                (iterate (for (k . v) in-sequence serialized-rss-item)
+                         (appending (list k v))))))
+
 @export
 (defun store-feed-dao (serialized-rss-feed &optional link)
   (declare (ignore link))
@@ -182,14 +221,6 @@
              (store-item-dao (serialize item)
                              (slot-value rss_feed 'id)))
     rss_feed))
-
-@export
-(defun store-item-dao (serialized-rss-item link)
- (eval `(postmodern:make-dao
-          'rss_item_store
-          :feed ,link
-          ,@(iterate (for (k . v) in-sequence serialized-rss-item)
-                     (appending (list k v))))))
 
 (defun get-and-possibly-store-feed (rss-feed)
   "Given an rss-feed, return the db's feed-id, persisting it if it doesn't already exist."
@@ -259,35 +290,6 @@
            (lambda (x) (plump:serialize (plump:parse (plump:text x)) ss))
            html)
       ss)))
-
-@export
-(defun make-rss-item (item)
-  (lquery:initialize item)
-  (flet ((dehtml (h) (plump:text (plump:parse h)))
-         (get-category-names (it) ;;; TODO: simplify this---Ask Shinmera on IRC
-           (if (not (equalp #() it))
-             (map 'vector
-                  (lambda (x) (plump:text (elt (plump:children x) 0)))
-                  it)
-             #())))
-    (let* ((content-encoded (lquery:$ (children) (tag-name "content:encoded")))
-
-           (description-element (default-when content-encoded (emptyp content-encoded)
-                                  (lquery:$ (children "description"))))
-
-           (description-raw (normalize-html
-                              (default-when description-element (emptyp description-element)
-                                (extract-text "description"))))
-
-           (description-munged (dehtml description-raw))
-           (category (get-category-names (lquery:$ "category"))))
-           ;(enclosure) --- TODO: implement comment / enclosure handling
-
-      (xml-text-bind (title link guid pub-date source comments)
-        (make-instance-from-symbols 'rss-item
-                                    item title link description-raw (description description-munged)
-                                    category guid pub-date source comments)))))
-      ;(setf (rss-item-enclosure result) enclosure)      -- TODO: comment/enclosure . . .
 
 
 ; \o/
