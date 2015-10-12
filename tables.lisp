@@ -1,6 +1,6 @@
 (in-package :cl-user)
 (defpackage :whitespace.tables
-  (:use #:cl #:alexandria #:postmodern #:annot.class))
+  (:use #:cl #:alexandria #:postmodern #:annot.class #:iterate #:whitespace.utils))
 (in-package :whitespace.tables)
 (cl-annot.syntax:enable-annot-syntax)
 
@@ -73,6 +73,59 @@
   (!foreign "rss_feed_store" "feedid" "id" :on-delete :cascade :on-update :cascade)
   (!foreign "reader_user" "uid" "id" :on-delete :cascade :on-update :cascade)
   (!unique '(uid feedid)))
+
+
+@export
+(defgeneric get-dao-for (obj &optional link)
+  (:documentation "Take an object an return the equivalent dao object. Use link to specify a single
+                   foreign key relationship---this probably should be generalized further"))
+
+@export
+(defgeneric serialize (cls &optional output-transform pair-transform))
+
+@export
+(defmacro defserializer ((specializes) &body slots)
+  (with-gensyms (obj o-t p-t)
+    `(defmethod serialize ((,obj ,specializes) &optional (,o-t #'identity) (,p-t #'%default-pair-transform))
+      (transform-result (,o-t ,p-t)
+        (slots-to-pairs ,obj ,slots)))))
+
+(defmethod serialize ((obj sequence) &optional (o-t #'identity) (p-t #'%default-pair-transform))
+  (iterate (for item in-sequence obj)
+           (collect (serialize item o-t p-t))))
+
+; this is the interface to be used
+(defserializer (rss_feed_store)
+  title link description fetch-url)
+
+(defserializer (rss_item_store)
+  title link description fetch-url)
+
+@export
+(defun store-item-dao (serialized-rss-item link)
+  (pomo:ensure-transaction
+    (apply #'postmodern:make-dao
+           (list* 'rss_item_store :feed link
+                  (iterate (for (k . v) in-sequence serialized-rss-item)
+                           (appending (list k v)))))))
+
+@export
+(defun store-feed-dao (serialized-rss-feed &optional link)
+  (declare (ignore link))
+  (pomo:ensure-transaction
+    (let* ((items nil)
+           (rss_feed (apply #'postmodern:make-dao
+                            (cons 'rss_feed_store
+                                  (iterate (for (k . v) in-sequence serialized-rss-feed)
+                                           (if (eql k :items)
+                                             (setf items v)
+                                             (appending (list k v))))))))
+      (iterate (for item in items)
+               (handler-case (pomo:with-savepoint store-item
+                               (store-item-dao (serialize item) (slot-value rss_feed 'id)))
+                 (cl-postgres-error:unique-violation ())))
+      rss_feed)))
+
 
 #|
 

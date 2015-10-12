@@ -12,6 +12,8 @@
 (ql:quickload :ubiquitous)
 (ql:quickload :iterate)
 (ql:quickload :jonathan)
+(ql:quickload :cl-actors)
+(ql:quickload :simple-tasks)
 
 (declaim (optimize (speed 0) (safety 3) (debug 2)))
 
@@ -19,10 +21,11 @@
 (push (cons "application" "rss+xml") drakma:*text-content-types*)
 (push (cons "text" "rss+xml") drakma:*text-content-types*)
 
+;(load "utils.lisp")
 (load "rss.lisp")
 
 (defpackage :whitespace
-  (:use #:cl #:whitespace.utils #:whitespace.rss #:whitespace.tables))
+  (:use #:cl #:whitespace.utils #:whitespace.feeds.rss #:whitespace.tables))
 
 (in-package plump-dom)
 
@@ -58,6 +61,15 @@
     (defparameter *feeds* (map 'vector (lambda (x) (make-rss-feed x)) docs))))
 
 (defparameter *db-connection-info* (ubiquitous:value 'db 'connection 'info))
+(defmacro with-whitespace-db (&body body)
+  `(postmodern:with-connection *db-connection-info*
+     ,@body))
+(defmacro wc (&body body)
+  `(with-whitespace-db ,@body))
+
+(defmacro with-xml-tags (&body body)
+  `(let ((plump:*tag-dispatchers* plump:*xml-tags*))
+     ,@body))
 
 (defmacro def-markup (name (&rest args) &body body)
   `(defmacro ,name ,args
@@ -302,6 +314,7 @@
 
                    `((:or (:and .link-header :hover) (.link.closed (:and .link-header :hover)))
                      :background-color ,(colors:colorscheme-hover-highlight *colorscheme*)))))
+        (declare (ignorable main-right-margin)) ; TODO: use this!!!
         `(200 (:content-type "text/css") ,ss)))))
 
 (cl-oid-connect:def-route ("/theme/dark.css" (params) :app *app*)
@@ -347,5 +360,32 @@
   (do () ((null *handler*))
     (stop))
   (start))
+
+(defun update-feed (url)
+  (wc
+    (postmodern:with-transaction ()
+      (upsert-feed (make-rss-feed (with-xml-tags (plump:parse (drakma:http-request url))))))))
+
+(defun update-all-feeds ()
+  (wc
+    (let ((urls (postmodern:query (:select 'fetch-url :from 'rss-feed-store))))
+      (mapcar (lambda (x) (apply #'update-feed x)) urls))))
+
+(defun minutes (minutes) (* minutes 60))
+
+(let (update-thread stop)
+  (defun start-update-thread ()
+    (setf update-thread
+          (bordeaux-threads:make-thread
+            (lambda ()
+              (loop
+                (update-all-feeds)
+                (sleep (ubiquitous:value 'update-frequency))
+                (when stop
+                  (return-from nil nil))))
+            :name "Whitespace Update Thread")))
+  (defun stop-update-thread ()
+    (setf stop t)
+    (setf update-thread nil)))
 
 ; vim: foldmethod=marker foldmarker=(,) foldminlines=3 :
