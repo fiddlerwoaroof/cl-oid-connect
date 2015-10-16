@@ -325,41 +325,14 @@
   (colors:let-palette (colors:invert-palette (make-instance 'colors:palette))
     (eval '(get-theme-css))))
 
-(defvar *handler* nil)
-
-(defun stop ()
-  (clack:stop (pop *handler*)))
+(defparameter oid-mw
+    (cl-oid-connect:oauth2-login-middleware
+      *app*
+      :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
+      :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json")
+      :login-callback #'login-callback))
 
 (ql:quickload :clack-middleware-postmodern)
-
-(defparameter oid-mw
-  (cl-oid-connect:oauth2-login-middleware
-    *app*
-    :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
-    :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json")
-    :login-callback #'login-callback))
-
-(defun start (&optional tmp)
-  (let ((server (if (> (length tmp) 1)
-                  (intern (string-upcase (elt tmp 1)) 'keyword)
-                  :hunchentoot)))
-    (push (clack:clackup
-            (lack.builder:builder
-              :backtrace
-              :session
-              ;:csrf
-              (lambda (app) (lambda (env)
-                              (postmodern:with-connection *db-connection-info*
-                                (funcall app env))))
-              (:static :path "/static/" :root #p"./static/")
-              *app*) :port 9090 :server server)
-          *handler*)))
-
-
-(defun restart-clack ()
-  (do () ((null *handler*))
-    (stop))
-  (start))
 
 (defun update-feed (url)
   (with-whitespace-db
@@ -404,5 +377,29 @@
   (defun stop-update-thread ()
     (setf stop t)
     (setf update-thread nil)))
+
+(let ((handler nil))
+  (defun stop () (clack:stop (pop handler)))
+
+  (defun start (&optional tmp)
+    (let ((server (if (> (length tmp) 1)
+                    (intern (string-upcase (elt tmp 1)) 'keyword)
+                    :hunchentoot)))
+      (push (clack:clackup
+              (lack.builder:builder
+                :backtrace
+                :session
+                ;:csrf
+                (lambda (app) (lambda (env)
+                                (postmodern:with-connection *db-connection-info*
+                                                            (funcall app env))))
+                (:static :path "/static/" :root #p"./static/")
+                *app*) :port 9090 :server server)
+            handler)))
+
+  (defun restart-clack ()
+    (do () ((null handler)) (stop))
+    (start)))
+ 
 
 ; vim: foldmethod=marker foldmarker=(,) foldminlines=3 :
