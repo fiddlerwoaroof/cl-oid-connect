@@ -362,16 +362,32 @@
   (start))
 
 (defun update-feed (url)
-  (wc
+  (with-whitespace-db
     (postmodern:with-transaction ()
       (upsert-feed (make-rss-feed (with-xml-tags (plump:parse (drakma:http-request url))))))))
 
+(defmacro amapcar-with-body (list &body forms)
+  (alexandria:once-only (list)
+    `(mapcar (lambda (it) ,@forms)
+             ,list)))
+
 (defun update-all-feeds ()
-  (wc
+  (with-whitespace-db
     (let ((urls (postmodern:query (:select 'fetch-url :from 'rss-feed-store))))
-      (mapcar (lambda (x) (apply #'update-feed x)) urls))))
+      (amapcar-with-body urls
+        (restart-case
+          (apply #'update-feed it)
+          (continue-updates () (warn (format nil "Skipping feed with fetch-url: ~s" it)))
+          (use-value (v) (update-feed v)))))))
 
 (defun minutes (minutes) (* minutes 60))
+
+(defun continue-updates (e)
+  (declare (ignore e))
+  (let ((restart (find-restart 'continue-updates)))
+    (when restart
+      (format t "continuing")
+      (invoke-restart restart))))
 
 (let (update-thread stop)
   (defun start-update-thread ()
@@ -379,7 +395,8 @@
           (bordeaux-threads:make-thread
             (lambda ()
               (loop
-                (update-all-feeds)
+                (handler-bind ((drakma:parameter-error #'continue-updates))
+                  (update-all-feeds))
                 (sleep (ubiquitous:value 'update-frequency))
                 (when stop
                   (return-from nil nil))))
