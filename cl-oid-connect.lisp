@@ -157,6 +157,40 @@
          (saved-state (gethash :state session)))
     (equal saved-state received-state)))
 
+(defmacro auth-entry-point (name endpoint-schema)
+  `(defun ,name (params)
+     (declare (ignore params))
+     (with-session-values (state endpoint-schema) (context :session)
+       (setf state (gen-state 36)
+             endpoint-schema ,endpoint-schema)
+       (with-endpoints ,endpoint-schema
+         (multiple-value-bind (content rcode headers uri) (do-auth-request ,endpoint-schema state)
+           (declare (ignore headers))
+           (if (< rcode 400) `(302 (:location ,(format nil "~a" uri)))
+             content))))))
+
+(defmacro def-callback-generator (name generator-args callback-args &body body)
+  `(defun ,name ,generator-args
+     (lambda ,callback-args
+       ,@body)))
+
+(defmacro reject-when-state-invalid (params &body body)
+  (alexandria:with-gensyms (received-state)
+    (alexandria:once-only (params)
+      `(let ((,received-state (cdr (string-assoc "state" ,params))))
+         (if (not (valid-state ,received-state))
+           '(403 '() "Out, vile imposter!")
+        ,@body)))))
+
+(defmacro auth-callback-skeleton (params (&key endpoint-schema auth-session-vars) &body body)
+  (alexandria:with-gensyms (session)
+    (alexandria:once-only (params endpoint-schema)
+      `(reject-when-state-invalid ,params
+         (with-endpoints ,endpoint-schema
+           (my-with-context-variables ((,session session))
+             (with-session-values ,auth-session-vars ,session
+               ,@body)))))))
+
 (define-condition user-not-logged-in (error) ())
 
 (defmacro my-with-context-variables ((&rest vars) &body body)
@@ -236,58 +270,31 @@
       (drakma:http-request endpoint
                            :parameters `(("alt" . "json")
                                          ("access_token" . ,access-token))))))
-(defmacro auth-entry-point (name endpoint-schema)
-  `(defun ,name (params)
-     (declare (ignore params))
-     (with-session-values (state endpoint-schema) (context :session)
-       (setf state (gen-state 36)
-             endpoint-schema ,endpoint-schema)
-       (with-endpoints ,endpoint-schema
-         (multiple-value-bind (content rcode headers uri) (do-auth-request ,endpoint-schema state)
-           (declare (ignore headers))
-           (if (< rcode 400) `(302 (:location ,(format nil "~a" uri)))
-             content))))))
 
 (auth-entry-point google-login-entry *goog-endpoint-schema*)
 (auth-entry-point facebook-login-entry *fbook-endpoint-schema*)
 
-(defmacro def-callback-generator (name generator-args callback-args &body body)
-  `(defun ,name ,generator-args
-     (lambda ,callback-args
-       ,@body)))
-
-(defmacro reject-when-state-invalid (params &body body)
-  (alexandria:with-gensyms (received-state)
-    (alexandria:once-only (params)
-      `(let ((,received-state (cdr (string-assoc "state" ,params))))
-         (if (not (valid-state ,received-state))
-           '(403 '() "Out, vile imposter!")
-        ,@body)))))
-
-(defmacro auth-callback-skeleton (params (&key endpoint-schema auth-session-vars) &body body)
-  (alexandria:with-gensyms (session)
-    (alexandria:once-only (params endpoint-schema)
-      `(reject-when-state-invalid ,params
-         (with-endpoints ,endpoint-schema
-           (my-with-context-variables ((,session session))
-             (with-session-values ,auth-session-vars ,session
-               ,@body)))))))
-
 (flet ((get-code (params) (assoc-cdr "code" params #'equal)))
 
   (def-callback-generator google-callback (get-app-user-cb) (params)
-    (auth-callback-skeleton params (:endpoint-schema *goog-endpoint-schema*
-                                    :auth-session-vars (accesstoken userinfo idtoken app-user))
-      (flet ((get-real-access-token (a-t) (assoc-cdr :access--token a-t))
-             (get-id-token (a-t) (cljwt:decode (assoc-cdr :id--token a-t) :fail-if-unsupported nil)))
-        (let* ((a-t (get-access-token *goog-endpoint-schema* (get-code params)))
-               (access-token (get-real-access-token a-t))
-               (id-token (get-id-token a-t))
-               (user-info (get-user-info *goog-endpoint-schema* access-token)))
-          (setf accesstoken access-token
-            app-user (funcall get-app-user-cb user-info id-token access-token)
-            idtoken id-token
-            userinfo user-info)
+
+    (labels ((get-real-access-token (a-t) (assoc-cdr :access--token a-t))
+             (get-id-token (a-t) (cljwt:decode (assoc-cdr :id--token a-t) :fail-if-unsupported nil))
+             (get-login-data (a-t)
+               (let ((access-token (get-real-access-token a-t)))
+                 (values access-token
+                         (get-user-info *goog-endpoint-schema* access-token)
+                         (get-id-token a-t)))))
+
+      (let ((a-t (get-access-token *goog-endpoint-schema* (get-code params))))
+        (auth-callback-skeleton params (:endpoint-schema *goog-endpoint-schema*
+                                        :auth-session-vars (accesstoken userinfo idtoken app-user))
+          (multiple-value-bind (access-token user-info id-token) (get-login-data a-t)
+            (setf
+              accesstoken access-token
+              userinfo user-info
+              idtoken id-token
+              app-user (funcall get-app-user-cb user-info id-token access-token)))
           '(302 (:location "/"))))))
 
   (def-callback-generator facebook-callback (get-app-user-cb) (params)
@@ -297,7 +304,8 @@
         (let* ((a-t (get-access-token *fbook-endpoint-schema* (get-code params)))
                (id-token (get-id-token a-t))
                (user-info (get-user-info *fbook-endpoint-schema* id-token)))
-          (setf accesstoken a-t
+          (setf
+            accesstoken a-t
             app-user (funcall get-app-user-cb user-info id-token a-t)
             idtoken id-token
             userinfo user-info)
