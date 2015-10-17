@@ -93,7 +93,7 @@
            (token-endpoint "https://graph.facebook.com/v2.3/oauth/access_token")
            (userinfo-endpoint "https://graph.facebook.com/v2.3/me")
            (auth-scope "email")
-           (redirect-uri  "http://whitespace.elangley.org/oidc_callback/facebook")))
+           (redirect-uri  "http://srv2.elangley.org:9090/oidc_callback/facebook")))
 
 (sheeple:defreply get-access-token ((endpoint-schema *fbook-endpoint-schema*) (code sheeple:=string=))
   (cl-json:decode-json-from-string
@@ -169,6 +169,18 @@
            (if (< rcode 400) `(302 (:location ,(format nil "~a" uri)))
              content))))))
 
+(flet ((get-code (params) (assoc-cdr "code" params #'equal)))
+  (defun run-callback-function (endpoint-schema params get-login-data get-app-user-cb)
+    (let ((a-t (get-access-token endpoint-schema (get-code params))))
+      (auth-callback-skeleton params (:endpoint-schema endpoint-schema
+                                      :auth-session-vars (accesstoken userinfo idtoken app-user))
+        (multiple-value-bind (access-token user-info id-token) (funcall get-login-data a-t)
+          (setf accesstoken access-token
+                userinfo user-info
+                idtoken id-token
+                app-user (funcall get-app-user-cb user-info id-token access-token)))
+        '(302 (:location "/"))))))
+
 (defmacro def-callback-generator (name generator-args callback-args &body body)
   `(defun ,name ,generator-args
      (lambda ,callback-args
@@ -188,8 +200,11 @@
       `(reject-when-state-invalid ,params
          (with-endpoints ,endpoint-schema
            (my-with-context-variables ((,session session))
-             (with-session-values ,auth-session-vars ,session
-               ,@body)))))))
+             ,(if (null auth-session-vars)
+                `(progn
+                   ,@body)
+                `(with-session-values ,auth-session-vars ,session
+                   ,@body))))))))
 
 (define-condition user-not-logged-in (error) ())
 
@@ -261,7 +276,7 @@
   (discover-endpoints *goog-endpoint-schema*
                       "https://accounts.google.com/.well-known/openid-configuration"
                       :gat #'goog-get-access-token)
-  (setf (redirect-uri *goog-endpoint-schema*) "http://whitespace.elangley.org/oidc_callback/google"))
+  (setf (redirect-uri *goog-endpoint-schema*) "http://srv2.elangley.org:9090/oidc_callback/google"))
 
 (sheeple:defreply get-user-info ((endpoint-schema *goog-endpoint-schema*) (access-token sheeple:=string=))
   (format t "getting user data: ~a~%" "blarg")
@@ -274,42 +289,24 @@
 (auth-entry-point google-login-entry *goog-endpoint-schema*)
 (auth-entry-point facebook-login-entry *fbook-endpoint-schema*)
 
-(flet ((get-code (params) (assoc-cdr "code" params #'equal)))
+(labels ((get-real-access-token (a-t) (assoc-cdr :access--token a-t))
+         (get-id-token (a-t) (cljwt:decode (assoc-cdr :id--token a-t) :fail-if-unsupported nil))
+         (get-login-data (a-t)
+           (let ((access-token (get-real-access-token a-t)))
+             (values access-token
+                     (get-user-info *goog-endpoint-schema* access-token)
+                     (get-id-token a-t)))))
 
   (def-callback-generator google-callback (get-app-user-cb) (params)
+    (run-callback-function *goog-endpoint-schema* params #'get-login-data get-app-user-cb)))
 
-    (labels ((get-real-access-token (a-t) (assoc-cdr :access--token a-t))
-             (get-id-token (a-t) (cljwt:decode (assoc-cdr :id--token a-t) :fail-if-unsupported nil))
-             (get-login-data (a-t)
-               (let ((access-token (get-real-access-token a-t)))
-                 (values access-token
-                         (get-user-info *goog-endpoint-schema* access-token)
-                         (get-id-token a-t)))))
-
-      (let ((a-t (get-access-token *goog-endpoint-schema* (get-code params))))
-        (auth-callback-skeleton params (:endpoint-schema *goog-endpoint-schema*
-                                        :auth-session-vars (accesstoken userinfo idtoken app-user))
-          (multiple-value-bind (access-token user-info id-token) (get-login-data a-t)
-            (setf
-              accesstoken access-token
-              userinfo user-info
-              idtoken id-token
-              app-user (funcall get-app-user-cb user-info id-token access-token)))
-          '(302 (:location "/"))))))
+(labels ((get-id-token (a-t) (assoc-cdr :access--token a-t)) ; <-- access--token is not a mistake 
+         (get-login-data (a-t)
+           (let ((id-token (get-id-token a-t)))
+             (values a-t (get-user-info *fbook-endpoint-schema* id-token) id-token))))
 
   (def-callback-generator facebook-callback (get-app-user-cb) (params)
-    (auth-callback-skeleton params (:endpoint-schema *fbook-endpoint-schema*
-                                    :auth-session-vars (accesstoken userinfo idtoken app-user))
-      (flet ((get-id-token (a-t) (assoc-cdr :access--token a-t))) ; <-- access--token is not a mistake
-        (let* ((a-t (get-access-token *fbook-endpoint-schema* (get-code params)))
-               (id-token (get-id-token a-t))
-               (user-info (get-user-info *fbook-endpoint-schema* id-token)))
-          (setf
-            accesstoken a-t
-            app-user (funcall get-app-user-cb user-info id-token a-t)
-            idtoken id-token
-            userinfo user-info)
-          '(302 (:location "/")))))))
+    (run-callback-function *fbook-endpoint-schema* params #'get-login-data get-app-user-cb)))
 
 (defun userinfo-route (params)
   (declare (ignore params))

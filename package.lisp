@@ -11,8 +11,8 @@
     #:cl-who
     #:drakma
     ;#:lack-middleware-session
+    #:iterate
     #:ningle
-    #:lass
     #:lquery
     #:plump
     #:sheeple
