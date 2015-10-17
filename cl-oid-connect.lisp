@@ -93,7 +93,7 @@
            (token-endpoint "https://graph.facebook.com/v2.3/oauth/access_token")
            (userinfo-endpoint "https://graph.facebook.com/v2.3/me")
            (auth-scope "email")
-           (redirect-uri  "http://srv2.elangley.org:9090/oidc_callback/facebook")))
+           (redirect-uri  "http://whitespace.elangley.org/oidc_callback/facebook")))
 
 (sheeple:defreply get-access-token ((endpoint-schema *fbook-endpoint-schema*) (code sheeple:=string=))
   (cl-json:decode-json-from-string
@@ -227,7 +227,7 @@
   (discover-endpoints *goog-endpoint-schema*
                       "https://accounts.google.com/.well-known/openid-configuration"
                       :gat #'goog-get-access-token)
-  (setf (redirect-uri *goog-endpoint-schema*) "http://srv2.elangley.org:9090/oidc_callback/google"))
+  (setf (redirect-uri *goog-endpoint-schema*) "http://whitespace.elangley.org/oidc_callback/google"))
 
 (sheeple:defreply get-user-info ((endpoint-schema *goog-endpoint-schema*) (access-token sheeple:=string=))
   (format t "getting user data: ~a~%" "blarg")
