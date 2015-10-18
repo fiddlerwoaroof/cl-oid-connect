@@ -1,4 +1,6 @@
 (in-package :cl-user)
+(ql:quickload :clack-middleware-postmodern)
+
 (ql:quickload :cl-markup)
 (ql:quickload :cl-oid-connect)
 (ql:quickload :colors)
@@ -25,7 +27,7 @@
 (load "rss.lisp")
 
 (defpackage :whitespace
-  (:use #:cl #:whitespace.utils #:whitespace.feeds.rss #:whitespace.tables))
+  (:use #:cl #:anaphora #:whitespace.utils #:whitespace.feeds.rss #:whitespace.tables))
 
 (in-package plump-dom)
 
@@ -141,18 +143,18 @@
 
 ; ; ;  Ultimately, this will only serialize the feed if the client
 (cl-oid-connect:def-route ("/feeds/add" (params) :method :post :app *app*)
-  (ningle.context:with-context-variables (session) 
+  (ningle.context:with-context-variables (session)
     (let ((user-info (gethash :app-user session))
           (result '(302 (:location "/")))
-          (api (string= (cl-oid-connect:assoc-cdr "api" params 'string=) "yes")) 
-          (url (cl-oid-connect:assoc-cdr "url" params 'string=)) 
+          (api (string= (cl-oid-connect:assoc-cdr "api" params 'string=) "yes"))
+          (url (cl-oid-connect:assoc-cdr "url" params 'string=))
           (plump-parser:*tag-dispatchers* plump-parser:*xml-tags*))
       (cl-oid-connect:require-login
         (when (neither-null params user-info)
           (handler-case
             (let* ((doc (plump:parse (drakma:http-request url)))
                    (uid (slot-value user-info 'id)))
-              (multiple-value-bind (added-feed dao-feed) (store-feed doc) 
+              (multiple-value-bind (added-feed dao-feed) (store-feed doc)
                 (subscribe-to-feed uid (slot-value dao-feed 'id))
                 (when api
                   (setf result `(200 (:Content-Type "application/json") ,(jsonapi-encoder t added-feed))))))
@@ -182,38 +184,7 @@
                                                           collect (elt *feeds* x)))))
         (base-template-f)))))
 
-(defun login-callback (userinfo &rest args)
-  (declare (ignore args))
-  (postmodern:with-transaction ()
-    (let* ((received-id (anaphora:aif (cl-oid-connect:assoc-cdr :id userinfo)
-                          anaphora:it
-                          (cl-oid-connect:assoc-cdr :sub userinfo)))
-           (db-user (car (postmodern:select-dao 'reader_user (:= :foreign-id received-id)))))
-      (if (not (null db-user))
-        db-user
-        (progn
-          (let ((name (cl-oid-connect:assoc-cdr :name userinfo))
-                (first-name (anaphora:aif (cl-oid-connect:assoc-cdr :first--name userinfo)
-                              anaphora:it
-                              (cl-oid-connect:assoc-cdr :given--name userinfo)))
-                (last-name (anaphora:aif (cl-oid-connect:assoc-cdr :last--name userinfo)
-                             anaphora:it
-                             (cl-oid-connect:assoc-cdr :family--name userinfo)))
-                (email (cl-oid-connect:assoc-cdr :email userinfo))
-                (gender (cl-oid-connect:assoc-cdr :gender userinfo))
-                (link (anaphora:aif (cl-oid-connect:assoc-cdr :link userinfo)
-                        anaphora:it
-                        (cl-oid-connect:assoc-cdr :profile userinfo)))
-                (locale (cl-oid-connect:assoc-cdr :locale userinfo)))
-            (postmodern:make-dao 'reader_user
-                                 :foreign-id received-id
-                                 :first-name first-name
-                                 :last-name last-name
-                                 :name name
-                                 :email email
-                                 :gender gender
-                                 :link link
-                                 :locale locale)))))))
+
 
 (cl-oid-connect:def-route ("/demo" (params) :app *app*)
   (base-template-f t))
@@ -325,14 +296,45 @@
   (colors:let-palette (colors:invert-palette (make-instance 'colors:palette))
     (eval '(get-theme-css))))
 
-(defparameter oid-mw
-    (cl-oid-connect:oauth2-login-middleware
-      *app*
-      :facebook-info (truename "~/github_repos/cl-oid-connect/facebook-secrets.json")
-      :google-info (truename "~/github_repos/cl-oid-connect/google-secrets.json")
-      :login-callback #'login-callback))
+(cl-oid-connect:def-route ("/userinfo.json" (params) :app *app*)
+  (declare (ignore params))
+  (ningle:with-context-variables (session)
+    (cl-oid-connect:require-login
+      (cl-oid-connect::with-endpoints (gethash :endpoint-schema session)
+        `(200 (:content-type "application/json") ,(cl-json:encode-json-to-string (gethash :userinfo session)))))))
 
-(ql:quickload :clack-middleware-postmodern)
+(cl-oid-connect:def-route ("/logout" (params) :app *app*)
+  (declare (ignore params))
+  (ningle:with-context-variables (session)
+    (setf (gethash :userinfo session) nil)
+    '(302 (:location "/"))))
+
+(defun assoc-cdr-alternatives (alist alt1 alt2 &optional (test #'eql))
+  (aif (cl-oid-connect:assoc-cdr alt1 alist test)
+    it
+    (cl-oid-connect:assoc-cdr alt2 alist test)))
+
+(cl-oid-connect::setup-oid-connect *app* (userinfo &rest args)
+  (declare (ignore args) (optimize (speed 0) (safety 3) (debug 3)))
+  (flet ((get-received-id (userinfo) (assoc-cdr-alternatives userinfo :id :sub))
+         (get-db-user (received-id) (car (postmodern:select-dao 'reader_user (:= :foreign-id received-id)))) 
+         (get-first-name (userinfo) (assoc-cdr-alternatives userinfo :first--name :given--name))
+         (get-last-name (userinfo) (assoc-cdr-alternatives userinfo :last--name :family--name))
+         (get-link (userinfo) (assoc-cdr-alternatives userinfo :link :profile)))
+
+    (postmodern:with-transaction ()
+      (let ((received-id (get-received-id userinfo)))
+        (aif (get-db-user received-id) it
+          (postmodern:make-dao
+            'reader_user
+            :foreign-id received-id
+            :first-name (get-first-name userinfo)
+            :last-name (get-last-name userinfo)
+            :name (cl-oid-connect:assoc-cdr :name userinfo)
+            :email (cl-oid-connect:assoc-cdr :email userinfo)
+            :gender (cl-oid-connect:assoc-cdr :gender userinfo)
+            :link (get-link userinfo)
+            :locale (cl-oid-connect:assoc-cdr :locale userinfo)))))))
 
 (defun update-feed (url)
   (with-whitespace-db
@@ -382,6 +384,9 @@
   (defun stop () (clack:stop (pop handler)))
 
   (defun start (&optional tmp)
+    (cl-oid-connect:initialize-oid-connect
+      (ubiquitous:value 'facebook 'secrets)
+      (ubiquitous:value 'google 'secrets))
     (let ((server (if (> (length tmp) 1)
                     (intern (string-upcase (elt tmp 1)) 'keyword)
                     :hunchentoot)))
@@ -400,6 +405,6 @@
   (defun restart-clack ()
     (do () ((null handler)) (stop))
     (start)))
- 
+
 
 ; vim: foldmethod=marker foldmarker=(,) foldminlines=3 :

@@ -27,5 +27,6 @@
     #:assoc-cdr
     #:session ; private!!
     #:vars-to-symbol-macrolets
+    #:initialize-oid-connect
     ))
 
