@@ -1,9 +1,0 @@
-(:import (url "http://fonts.googleapis.com/css?family=Source+Code+Pro"))
-(.link-content
-  :font-size "1rem"
-  ((p + p)
-   :margin-top "1em")
-  (pre
-    :font-family "Source Code Pro"
-    )
-  )
