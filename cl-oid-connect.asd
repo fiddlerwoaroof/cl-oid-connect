@@ -18,10 +18,12 @@
                 :plump
                 :cl-who
                 :postmodern
-                :iterate)
+                :iterate
+                :fwoar.lisputils)
   :serial t
-  :components ((:file "utils")
-               (:file "package")
+  :components ((:file "package")
+               (:file "utils")  
+               (:file "objects")  
                (:file "cl-oid-connect")))
 
 

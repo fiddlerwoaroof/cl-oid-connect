@@ -1,0 +1,5 @@
+*-secrets.json
+.*.sw?
+*.fasl
+bin/*
+[#]*[#]
