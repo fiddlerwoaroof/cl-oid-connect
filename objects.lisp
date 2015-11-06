@@ -33,22 +33,23 @@
 
 (in-package :cl-oid-connect.objects)
 
-(defparameter *oid* (make-instance 'ningle:<app>))
 (setf drakma:*text-content-types* (cons '("application" . "json") drakma:*text-content-types*))
 
-(setf =service-info= (object :parents '()
-                             :properties '((client-id nil :accessor client-id)
-                                           (secret nil :accessor secret))))
+(defparameter =service-info=
+  (object :parents '()
+          :properties '((client-id nil :accessor client-id)
+                        (secret nil :accessor secret))))
 (defparameter *fbook-info* (clone =service-info=))
 (defparameter *goog-info* (clone =service-info=))
-
-(setf =endpoint-schema= (object :parents '()
-                                :properties '((auth-endpoint nil :accessor auth-endpoint)
-                                              (token-endpoint nil :accessor token-endpoint)
-                                              (userinfo-endpoint nil :accessor t)
-                                              (auth-scope "openid profile email" :accessor t)
-                                              (redirect-uri nil :accessor t))))
 (defparameter *endpoint-schema* nil)
+
+(defparameter =endpoint-schema=
+  (object :parents '()
+          :properties '((auth-endpoint nil :accessor auth-endpoint)
+                        (token-endpoint nil :accessor token-endpoint)
+                        (userinfo-endpoint nil :accessor t)
+                        (auth-scope "openid profile email" :accessor t)
+                        (redirect-uri nil :accessor t))))
 
 (defmessage get-user-info (a b))
 (defmessage get-access-token (a b))

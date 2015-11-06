@@ -49,11 +49,6 @@
                 app-user (funcall get-app-user-cb user-info id-token access-token)))
         '(302 (:location "/"))))))
 
-(define-condition user-not-logged-in (error) ())
-
-
-
-
 
 (defun load-provider-secrets (provider-info secrets)
   (setf (client-id provider-info) (assoc-cdr :client-id secrets)

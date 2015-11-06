@@ -32,6 +32,9 @@
  |#
 
 (in-package :cl-oid-connect.utils)
+(defparameter *oid* (make-instance '<app>))
+(define-condition user-not-logged-in (error) ())
+
 (eval-when (:compile-toplevel :execute :load-toplevel)
   (defun vars-to-symbol-macrolets (vars obj)
     (iterate:iterate (iterate:for (store key) in (ensure-mapping vars))
@@ -44,7 +47,7 @@
 
 ; This probably should eventually go?
 (defmacro with-endpoints (endpoint-schema  &body body)
-  `(let* ((*endpoint-schema* ,endpoint-schema))
+  `(let* ((cl-oid-connect.objects::*endpoint-schema* ,endpoint-schema))
      ,@body))
 
 (defmacro with-session ((var) &body body)
@@ -55,7 +58,7 @@
        ,@body)))
 
 (defmacro def-route ((url args &key (app *oid*) (method :GET)) &body body)
-  `(setf (ningle:route ,app ,url :method ,method)
+  `(setf (route ,app ,url :method ,method)
          (lambda ,args
            (declare (ignorable ,@args))
            ,@body)))
@@ -89,7 +92,7 @@
        (setf state (gen-state 36)
              endpoint-schema ,endpoint-schema)
        (with-endpoints ,endpoint-schema
-         (multiple-value-bind (content rcode headers uri) (do-auth-request ,endpoint-schema state)
+         (multiple-value-bind (content rcode headers uri) (cl-oid-connect.objects:do-auth-request ,endpoint-schema state)
            (declare (ignore headers))
            (if (< rcode 400) `(302 (:location ,(format nil "~a" uri)))
              content))))))
@@ -98,7 +101,7 @@
   (with-gensyms (get-app-user-cb cb-params)
     `(defun ,name (,get-app-user-cb)
        (lambda (,cb-params)
-         (run-callback-function
+         (cl-oid-connect:run-callback-function
            ,endpoint-schema ,cb-params ,get-app-user-cb
            (lambda ,params
              ,@body))))))
@@ -137,7 +140,7 @@
              (error c)))))))
 
 (defmacro setup-oid-connect (app args &body callback)
-  `(bind-oid-connect-routes ,app (lambda ,args ,@callback)))
+  `(cl-oid-connect::bind-oid-connect-routes ,app (lambda ,args ,@callback)))
 
 (flet ((handle-no-user (main-body handler-body)
          `(handler-case (ensure-logged-in ,@main-body)
@@ -163,5 +166,7 @@
                 (not (string= next-page (lack.request:request-path-info *request*))))
          (progn
            (setf (gethash :next-page ,session) nil)
-           `(302 (:location ,next-page)))))))
+           `(302 (:location ,next-page)))
+         (progn
+           ,@body)))))
 
