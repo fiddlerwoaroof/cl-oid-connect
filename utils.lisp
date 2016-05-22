@@ -62,6 +62,7 @@
          (lambda ,args
            (declare (ignorable ,@args))
            ,@body)))
+
 (defun gen-state (len)
   (with-output-to-string (stream)
     (let ((*print-base* 36))
@@ -131,16 +132,35 @@
   (alexandria:with-gensyms (session userinfo)
     `(my-with-context-variables ((,session session))
        (with-session-values ((,userinfo userinfo)) ,session
-         (handler-case
-           (if (null ,userinfo)
-             (error 'user-not-logged-in)
-             (progn ,@body))
-           (error (c)
+         (if ,userinfo
+           (progn ,@body) 
+           (progn
              (setf ,userinfo nil)
-             (error c)))))))
+             (format t "Clearing all the infos")
+             (error 'user-not-logged-in)))))))
 
 (defmacro setup-oid-connect (app args &body callback)
   `(cl-oid-connect::bind-oid-connect-routes ,app (lambda ,args ,@callback)))
+
+(defun save-redirect (path)
+  (with-session-values (next-page) (context :session)
+    (setf next-page path)))
+
+(defun call-with-login (authorized-cb unauthorized-cb)
+  (handler-case
+    (ensure-logged-in
+      (funcall authorized-cb))
+    (user-not-logged-in (c)
+                        (funcall unauthorized-cb c))))
+
+(defmacro with-login (handler (sub (sym) &body unauthorized-action))
+  (unless (eq sub :unauthorized)
+    (error 'error "unauthorized clause must start with \"unauthorized\""))
+  `(call-with-login
+     (lambda ()
+       ,handler)
+     (lambda (,sym)
+       ,@unauthorized-action)))
 
 (flet ((handle-no-user (main-body handler-body)
          `(handler-case (ensure-logged-in ,@main-body)
@@ -153,10 +173,10 @@
 
   (defmacro require-login (&body body)
     "Redirects to /login if not logged in."
-    (handle-no-user body
-                    `((with-session-values (next-page) (context :session)
-                        (setf next-page (lack.request:request-path-info *request*))
-                        '(302 (:location "/login")))))))
+    (handle-no-user
+      body
+      `((save-redirect (lack.request:request-path-info *request*))
+        '(302 (:location "/login"))))))
 
 (defmacro redirect-if-necessary (sessionvar &body body)
   (with-gensyms (session)
